@@ -1,0 +1,9 @@
+name: pythc
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - uv
+  - numpy<2.5.0
+  - scipy
+  - libblas=*=*mkl

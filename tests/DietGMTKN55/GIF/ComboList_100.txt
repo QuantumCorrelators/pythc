@@ -1,0 +1,663 @@
+Amino20x4-23:
+  Energy: 4.0450
+  Weight: 23.3100
+  Species:
+    - { ID: "Amino20x4-23-GLN_xap", Count: 1 }
+    - { ID: "Amino20x4-23-GLN_xai", Count: -1 }
+Amino20x4-48:
+  Energy: 0.5400
+  Weight: 23.3100
+  Species:
+    - { ID: "Amino20x4-48-LYS_xap", Count: -1 }
+    - { ID: "Amino20x4-48-LYS_xat", Count: 1 }
+Amino20x4-56:
+  Energy: 1.8890
+  Weight: 23.3100
+  Species:
+    - { ID: "Amino20x4-56-PHE_xal", Count: 1 }
+    - { ID: "Amino20x4-56-PHE_xaw", Count: -1 }
+BHROT27-1:
+  Energy: 2.7300
+  Weight: 9.0600
+  Species:
+    - { ID: "BHROT27-1-ethane_ecl", Count: 1 }
+    - { ID: "BHROT27-1-ethane_st", Count: -1 }
+BHROT27-10:
+  Energy: 8.0300
+  Weight: 9.0600
+  Species:
+    - { ID: "BHROT27-10-h2s2", Count: -1 }
+    - { ID: "BHROT27-10-h2s2_cis", Count: 1 }
+BHROT27-20:
+  Energy: 1.7800
+  Weight: 9.0600
+  Species:
+    - { ID: "BHROT27-20-bithiophene_TS", Count: 1 }
+    - { ID: "BHROT27-20-bithiophene_anti", Count: -1 }
+FH51-25:
+  Energy: -20.2700
+  Weight: 1.8300
+  Species:
+    - { ID: "FH51-25-H2", Count: -1 }
+    - { ID: "FH51-25-dimethylpyrrole", Count: 1 }
+    - { ID: "FH51-25-methylpyridine", Count: -1 }
+ISOL24-13:
+  Energy: 33.0200
+  Weight: 2.5900
+  Species:
+    - { ID: "ISOL24-13-i13p", Count: 1 }
+    - { ID: "ISOL24-13-i13e", Count: -1 }
+PCONF21-7:
+  Energy: 2.1800
+  Weight: 35.0500
+  Species:
+    - { ID: "PCONF21-7-99", Count: -1 }
+    - { ID: "PCONF21-7-412", Count: 1 }
+PCONF21-8:
+  Energy: 1.6100
+  Weight: 35.0500
+  Species:
+    - { ID: "PCONF21-8-99", Count: -1 }
+    - { ID: "PCONF21-8-691", Count: 1 }
+PCONF21-18:
+  Energy: 2.7400
+  Weight: 35.0500
+  Species:
+    - { ID: "PCONF21-18-SER_b", Count: 1 }
+    - { ID: "PCONF21-18-SER_ab", Count: -1 }
+ICONF-16:
+  Energy: 3.6600
+  Weight: 17.4000
+  Species:
+    - { ID: "ICONF-16-H4P2O7_1", Count: -1 }
+    - { ID: "ICONF-16-H4P2O7_3", Count: 1 }
+ISO34-7:
+  Energy: 11.1500
+  Weight: 3.9000
+  Species:
+    - { ID: "ISO34-7-E7", Count: -1 }
+    - { ID: "ISO34-7-P7", Count: 1 }
+ISO34-12:
+  Energy: 45.6500
+  Weight: 3.9000
+  Species:
+    - { ID: "ISO34-12-P12", Count: 1 }
+    - { ID: "ISO34-12-E12", Count: -1 }
+UPU23-5:
+  Energy: 2.0200
+  Weight: 9.9300
+  Species:
+    - { ID: "UPU23-5-1p", Count: 1 }
+    - { ID: "UPU23-5-2p", Count: -1 }
+RG18-1:
+  Energy: 0.0800
+  Weight: 98.0000
+  Species:
+    - { ID: "RG18-1-ne2", Count: -1 }
+    - { ID: "RG18-1-ne", Count: 2 }
+RG18-15:
+  Energy: 0.2400
+  Weight: 98.0000
+  Species:
+    - { ID: "RG18-15-c2h6Ne", Count: -1 }
+    - { ID: "RG18-15-c2h6", Count: 1 }
+    - { ID: "RG18-15-ne", Count: 1 }
+DC13-6:
+  Energy: -25.7000
+  Weight: 1.0300
+  Species:
+    - { ID: "DC13-6-carbooxo2", Count: -1 }
+    - { ID: "DC13-6-carbooxo1", Count: 1 }
+DC13-12:
+  Energy: -58.7000
+  Weight: 1.0300
+  Species:
+    - { ID: "DC13-12-o3_c2h4_add", Count: 1 }
+    - { ID: "DC13-12-c2h4", Count: -1 }
+    - { ID: "DC13-12-o3", Count: -1 }
+BH76-6:
+  Energy: 17.8000
+  Weight: 3.0500
+  Species:
+    - { ID: "BH76-6-h", Count: -1 }
+    - { ID: "BH76-6-hclhts", Count: 1 }
+    - { ID: "BH76-6-hcl", Count: -1 }
+BH76-18:
+  Energy: 2.5000
+  Weight: 3.0500
+  Species:
+    - { ID: "BH76-18-ch3cl", Count: -1 }
+    - { ID: "BH76-18-cl-", Count: -1 }
+    - { ID: "BH76-18-clch3clts", Count: 1 }
+BH76-54:
+  Energy: 20.4000
+  Weight: 3.0500
+  Species:
+    - { ID: "BH76-54-H2O", Count: -1 }
+    - { ID: "BH76-54-C2H5", Count: -1 }
+    - { ID: "BH76-54-RKT09", Count: 1 }
+BH76-74:
+  Energy: 16.9000
+  Weight: 3.0500
+  Species:
+    - { ID: "BH76-74-ch3", Count: -1 }
+    - { ID: "BH76-74-RKT21", Count: 1 }
+    - { ID: "BH76-74-NH3", Count: -1 }
+RSE43-28:
+  Energy: -6.0000
+  Weight: 7.4800
+  Species:
+    - { ID: "RSE43-28-P30", Count: 1 }
+    - { ID: "RSE43-28-E30", Count: -1 }
+RSE43-30:
+  Energy: -4.3000
+  Weight: 7.4800
+  Species:
+    - { ID: "RSE43-30-P32", Count: 1 }
+    - { ID: "RSE43-30-E32", Count: -1 }
+RSE43-43:
+  Energy: -2.3000
+  Weight: 7.4800
+  Species:
+    - { ID: "RSE43-43-P45", Count: 1 }
+    - { ID: "RSE43-43-E45", Count: -1 }
+INV24-12:
+  Energy: 10.3000
+  Weight: 1.7800
+  Species:
+    - { ID: "INV24-12-Dibenzocycloheptene", Count: -1 }
+    - { ID: "INV24-12-Dibenzocycloheptene_TS", Count: 1 }
+INV24-19:
+  Energy: 6.2000
+  Weight: 1.7800
+  Species:
+    - { ID: "INV24-19-BN_Corannulene", Count: -1 }
+    - { ID: "INV24-19-BN_Corannulene_TS", Count: 1 }
+INV24-22:
+  Energy: 27.2000
+  Weight: 1.7800
+  Species:
+    - { ID: "INV24-22-BN_Sumanene_TS", Count: 1 }
+    - { ID: "INV24-22-BN_Sumanene", Count: -1 }
+G2RC-15:
+  Energy: -39.4300
+  Weight: 1.1100
+  Species:
+    - { ID: "G2RC-15-1", Count: -3 }
+    - { ID: "G2RC-15-11", Count: 2 }
+    - { ID: "G2RC-15-34", Count: -1 }
+CHB6-1:
+  Energy: -34.4300
+  Weight: 2.1200
+  Species:
+    - { ID: "CHB6-1-22A", Count: -1 }
+    - { ID: "CHB6-1-22", Count: 1 }
+    - { ID: "CHB6-1-22B", Count: -1 }
+RC21-4:
+  Energy: 59.4400
+  Weight: 1.5900
+  Species:
+    - { ID: "RC21-4-2e", Count: -1 }
+    - { ID: "RC21-4-2p3", Count: 1 }
+    - { ID: "RC21-4-2p2", Count: 1 }
+BHPERI-1:
+  Energy: 35.3000
+  Weight: 2.7200
+  Species:
+    - { ID: "BHPERI-1-Cyclobutene", Count: -1 }
+    - { ID: "BHPERI-1-TS1", Count: 1 }
+BHPERI-17:
+  Energy: 13.1000
+  Weight: 2.7200
+  Species:
+    - { ID: "BHPERI-17-13r_7", Count: -1 }
+    - { ID: "BHPERI-17-13_c2h4", Count: -1 }
+    - { ID: "BHPERI-17-13ts_7a", Count: 1 }
+BHPERI-23:
+  Energy: 27.8000
+  Weight: 2.7200
+  Species:
+    - { ID: "BHPERI-23-00r", Count: -1 }
+    - { ID: "BHPERI-23-06ts", Count: 1 }
+    - { ID: "BHPERI-23-05r", Count: -1 }
+BHPERI-26:
+  Energy: 31.3000
+  Weight: 2.7200
+  Species:
+    - { ID: "BHPERI-26-00r", Count: -1 }
+    - { ID: "BHPERI-26-09r", Count: -1 }
+    - { ID: "BHPERI-26-09ts", Count: 1 }
+PArel-3:
+  Energy: 2.9400
+  Weight: 12.2800
+  Species:
+    - { ID: "PArel-3-T0", Count: 1 }
+    - { ID: "PArel-3-T1", Count: -1 }
+PArel-5:
+  Energy: 7.1900
+  Weight: 12.2800
+  Species:
+    - { ID: "PArel-5-T3", Count: 1 }
+    - { ID: "PArel-5-T1", Count: -1 }
+PArel-10:
+  Energy: 2.9800
+  Weight: 12.2800
+  Species:
+    - { ID: "PArel-10-sugar0", Count: -1 }
+    - { ID: "PArel-10-sugar2", Count: 1 }
+PArel-20:
+  Energy: 2.1500
+  Weight: 12.2800
+  Species:
+    - { ID: "PArel-20-c2cl41", Count: 1 }
+    - { ID: "PArel-20-c2cl43", Count: -1 }
+SCONF-10:
+  Energy: 5.6500
+  Weight: 12.3600
+  Species:
+    - { ID: "SCONF-10-C1", Count: -1 }
+    - { ID: "SCONF-10-C11", Count: 1 }
+ALKBDE10-1:
+  Energy: 138.7000
+  Weight: 0.5600
+  Species:
+    - { ID: "ALKBDE10-1-be", Count: 1 }
+    - { ID: "ALKBDE10-1-bef", Count: -1 }
+    - { ID: "ALKBDE10-1-f", Count: 1 }
+W4-11-12:
+  Energy: 607.0230
+  Weight: 0.1900
+  Species:
+    - { ID: "W4-11-12-h", Count: 6 }
+    - { ID: "W4-11-12-b", Count: 2 }
+    - { ID: "W4-11-12-b2h6", Count: -1 }
+W4-11-37:
+  Energy: 446.0810
+  Weight: 0.1900
+  Species:
+    - { ID: "W4-11-37-h", Count: 3 }
+    - { ID: "W4-11-37-c", Count: 2 }
+    - { ID: "W4-11-37-ch2ch", Count: -1 }
+W4-11-39:
+  Energy: 705.6050
+  Weight: 0.1900
+  Species:
+    - { ID: "W4-11-39-propyne", Count: -1 }
+    - { ID: "W4-11-39-h", Count: 4 }
+    - { ID: "W4-11-39-c", Count: 3 }
+W4-11-58:
+  Energy: 225.2740
+  Weight: 0.1900
+  Species:
+    - { ID: "W4-11-58-becl2", Count: -1 }
+    - { ID: "W4-11-58-cl", Count: 2 }
+    - { ID: "W4-11-58-be", Count: 1 }
+W4-11-85:
+  Energy: 390.1410
+  Weight: 0.1900
+  Species:
+    - { ID: "W4-11-85-c", Count: 1 }
+    - { ID: "W4-11-85-co2", Count: -1 }
+    - { ID: "W4-11-85-o", Count: 2 }
+W4-11-92:
+  Energy: 228.4850
+  Weight: 0.1900
+  Species:
+    - { ID: "W4-11-92-n2", Count: -1 }
+    - { ID: "W4-11-92-n", Count: 2 }
+W4-11-104:
+  Energy: 280.7780
+  Weight: 0.1900
+  Species:
+    - { ID: "W4-11-104-c", Count: 1 }
+    - { ID: "W4-11-104-s", Count: 2 }
+    - { ID: "W4-11-104-cs2", Count: -1 }
+W4-11-136:
+  Energy: 126.3850
+  Weight: 0.1900
+  Species:
+    - { ID: "W4-11-136-cloo", Count: -1 }
+    - { ID: "W4-11-136-o", Count: 2 }
+    - { ID: "W4-11-136-cl", Count: 1 }
+W4-11-138:
+  Energy: 147.4280
+  Weight: 0.1900
+  Species:
+    - { ID: "W4-11-138-o3", Count: -1 }
+    - { ID: "W4-11-138-o", Count: 3 }
+BH76RC-16:
+  Energy: 13.4000
+  Weight: 2.6600
+  Species:
+    - { ID: "BH76RC-16-fch3fts", Count: 1 }
+    - { ID: "BH76RC-16-fch3fcomp", Count: -1 }
+S66-11:
+  Energy: 5.4200
+  Weight: 10.4000
+  Species:
+    - { ID: "S66-11-11", Count: -1 }
+    - { ID: "S66-11-11A", Count: 1 }
+    - { ID: "S66-11-11B", Count: 1 }
+S66-17:
+  Energy: 17.1800
+  Weight: 10.4000
+  Species:
+    - { ID: "S66-17-17", Count: -1 }
+    - { ID: "S66-17-17B", Count: 1 }
+    - { ID: "S66-17-17A", Count: 1 }
+S66-24:
+  Energy: 2.8200
+  Weight: 10.4000
+  Species:
+    - { ID: "S66-24-24", Count: -1 }
+    - { ID: "S66-24-24A", Count: 1 }
+    - { ID: "S66-24-24B", Count: 1 }
+S66-31:
+  Energy: 3.3800
+  Weight: 10.4000
+  Species:
+    - { ID: "S66-31-31B", Count: 1 }
+    - { ID: "S66-31-31A", Count: 1 }
+    - { ID: "S66-31-31", Count: -1 }
+S66-45:
+  Energy: 1.7500
+  Weight: 10.4000
+  Species:
+    - { ID: "S66-45-45A", Count: 1 }
+    - { ID: "S66-45-45B", Count: 1 }
+    - { ID: "S66-45-45", Count: -1 }
+MB16-43-4:
+  Energy: 356.8481
+  Weight: 0.1200
+  Species:
+    - { ID: "MB16-43-4-4", Count: -2 }
+    - { ID: "MB16-43-4-BH3", Count: 6 }
+    - { ID: "MB16-43-4-F2", Count: 1 }
+    - { ID: "MB16-43-4-CH4", Count: 2 }
+    - { ID: "MB16-43-4-O2", Count: 1 }
+    - { ID: "MB16-43-4-H2", Count: -17 }
+    - { ID: "MB16-43-4-SiH4", Count: 4 }
+    - { ID: "MB16-43-4-AlH3", Count: 2 }
+MB16-43-31:
+  Energy: 534.9003
+  Weight: 0.1200
+  Species:
+    - { ID: "MB16-43-31-BH3", Count: 4 }
+    - { ID: "MB16-43-31-P2", Count: 4 }
+    - { ID: "MB16-43-31-F2", Count: 1 }
+    - { ID: "MB16-43-31-CH4", Count: 2 }
+    - { ID: "MB16-43-31-O2", Count: 1 }
+    - { ID: "MB16-43-31-H2", Count: -8 }
+    - { ID: "MB16-43-31-31", Count: -2 }
+    - { ID: "MB16-43-31-Cl2", Count: 1 }
+    - { ID: "MB16-43-31-AlH3", Count: 2 }
+G21IP-28:
+  Energy: 243.7090
+  Weight: 0.2200
+  Species:
+    - { ID: "G21IP-28-IP_72", Count: 1 }
+    - { ID: "G21IP-28-26", Count: -1 }
+HAL59-1:
+  Energy: 0.8500
+  Weight: 12.3800
+  Species:
+    - { ID: "HAL59-1-PCH_PhBr", Count: -1 }
+    - { ID: "HAL59-1-PhBr", Count: 1 }
+    - { ID: "HAL59-1-PCH", Count: 1 }
+HAL59-8:
+  Energy: 1.8700
+  Weight: 12.3800
+  Species:
+    - { ID: "HAL59-8-NCH", Count: 1 }
+    - { ID: "HAL59-8-PhI", Count: 1 }
+    - { ID: "HAL59-8-NCH_PhI", Count: -1 }
+HAL59-21:
+  Energy: 10.5400
+  Weight: 12.3800
+  Species:
+    - { ID: "HAL59-21-NH3_FCl", Count: -1 }
+    - { ID: "HAL59-21-FCl", Count: 1 }
+    - { ID: "HAL59-21-NH3", Count: 1 }
+HAL59-38:
+  Energy: 4.4100
+  Weight: 12.3800
+  Species:
+    - { ID: "HAL59-38-OCH2", Count: 1 }
+    - { ID: "HAL59-38-BrBr", Count: 1 }
+    - { ID: "HAL59-38-BrBr_OCH2", Count: -1 }
+HAL59-43:
+  Energy: 3.6100
+  Weight: 12.3800
+  Species:
+    - { ID: "HAL59-43-MeI", Count: 1 }
+    - { ID: "HAL59-43-pyr", Count: 1 }
+    - { ID: "HAL59-43-MeI_pyr", Count: -1 }
+HAL59-56:
+  Energy: 1.8100
+  Weight: 12.3800
+  Species:
+    - { ID: "HAL59-56-27_CH3Br-benAB", Count: -1 }
+    - { ID: "HAL59-56-27_CH3Br-benA", Count: 1 }
+    - { ID: "HAL59-56-27_CH3Br-benB", Count: 1 }
+BUT14DIOL-28:
+  Energy: 2.8300
+  Weight: 20.3000
+  Species:
+    - { ID: "BUT14DIOL-28-B1", Count: -1 }
+    - { ID: "BUT14DIOL-28-B29", Count: 1 }
+BUT14DIOL-39:
+  Energy: 3.1000
+  Weight: 20.3000
+  Species:
+    - { ID: "BUT14DIOL-39-B1", Count: -1 }
+    - { ID: "BUT14DIOL-39-B40", Count: 1 }
+BUT14DIOL-63:
+  Energy: 4.3100
+  Weight: 20.3000
+  Species:
+    - { ID: "BUT14DIOL-63-B1", Count: -1 }
+    - { ID: "BUT14DIOL-63-B64", Count: 1 }
+CARBHB12-3:
+  Energy: 2.4210
+  Weight: 9.4200
+  Species:
+    - { ID: "CARBHB12-3-3O_B", Count: 1 }
+    - { ID: "CARBHB12-3-3O_A", Count: 1 }
+    - { ID: "CARBHB12-3-3O", Count: -1 }
+CARBHB12-4:
+  Energy: 9.9670
+  Weight: 9.4200
+  Species:
+    - { ID: "CARBHB12-4-4O", Count: -1 }
+    - { ID: "CARBHB12-4-4O_B", Count: 1 }
+    - { ID: "CARBHB12-4-4O_A", Count: 1 }
+CARBHB12-6:
+  Energy: 3.0210
+  Weight: 9.4200
+  Species:
+    - { ID: "CARBHB12-6-2N_A", Count: 1 }
+    - { ID: "CARBHB12-6-2N", Count: -1 }
+    - { ID: "CARBHB12-6-2N_B", Count: 1 }
+CARBHB12-11:
+  Energy: 3.2410
+  Weight: 9.4200
+  Species:
+    - { ID: "CARBHB12-11-3CL", Count: -1 }
+    - { ID: "CARBHB12-11-3CL_B", Count: 1 }
+    - { ID: "CARBHB12-11-3CL_A", Count: 1 }
+AHB21-1:
+  Energy: -17.7900
+  Weight: 2.5300
+  Species:
+    - { ID: "AHB21-1-1", Count: 1 }
+    - { ID: "AHB21-1-1A", Count: -1 }
+    - { ID: "AHB21-1-1B", Count: -1 }
+AHB21-15:
+  Energy: -8.6200
+  Weight: 2.5300
+  Species:
+    - { ID: "AHB21-15-15A", Count: -1 }
+    - { ID: "AHB21-15-15B", Count: -1 }
+    - { ID: "AHB21-15-15", Count: 1 }
+PNICO23-13:
+  Energy: 3.9800
+  Weight: 13.3000
+  Species:
+    - { ID: "PNICO23-13-13b", Count: 1 }
+    - { ID: "PNICO23-13-13", Count: -1 }
+    - { ID: "PNICO23-13-13a", Count: 1 }
+PNICO23-17:
+  Energy: 7.1000
+  Weight: 13.3000
+  Species:
+    - { ID: "PNICO23-17-17a", Count: 1 }
+    - { ID: "PNICO23-17-17", Count: -1 }
+    - { ID: "PNICO23-17-17b", Count: 1 }
+G21EA-5:
+  Energy: 17.3000
+  Weight: 1.6900
+  Species:
+    - { ID: "G21EA-5-EA_p", Count: 1 }
+    - { ID: "G21EA-5-EA_p-", Count: -1 }
+G21EA-21:
+  Energy: -0.2000
+  Weight: 1.6900
+  Species:
+    - { ID: "G21EA-21-EA_21n", Count: 1 }
+    - { ID: "G21EA-21-EA_21", Count: -1 }
+G21EA-25:
+  Energy: 54.7000
+  Weight: 1.6900
+  Species:
+    - { ID: "G21EA-25-EA_25n", Count: 1 }
+    - { ID: "G21EA-25-EA_25", Count: -1 }
+CDIE20-2:
+  Energy: 4.4000
+  Weight: 14.0200
+  Species:
+    - { ID: "CDIE20-2-P20", Count: 1 }
+    - { ID: "CDIE20-2-R21", Count: -1 }
+CDIE20-14:
+  Energy: 4.4000
+  Weight: 14.0200
+  Species:
+    - { ID: "CDIE20-14-R48", Count: -1 }
+    - { ID: "CDIE20-14-P48", Count: 1 }
+IL16-3:
+  Energy: -116.9100
+  Weight: 0.5200
+  Species:
+    - { ID: "IL16-3-147B", Count: -1 }
+    - { ID: "IL16-3-147", Count: 1 }
+    - { ID: "IL16-3-147A", Count: -1 }
+BSR36-4:
+  Energy: 8.8500
+  Weight: 3.5100
+  Species:
+    - { ID: "BSR36-4-c2h6", Count: 5 }
+    - { ID: "BSR36-4-ch4", Count: -4 }
+    - { ID: "BSR36-4-h4", Count: -1 }
+BSR36-21:
+  Energy: 9.7800
+  Weight: 3.5100
+  Species:
+    - { ID: "BSR36-21-c2h6", Count: 7 }
+    - { ID: "BSR36-21-r6", Count: -1 }
+    - { ID: "BSR36-21-ch4", Count: -7 }
+HEAVY28-5:
+  Energy: 0.9800
+  Weight: 45.7900
+  Species:
+    - { ID: "HEAVY28-5-bih3", Count: 1 }
+    - { ID: "HEAVY28-5-bih3_hbr", Count: -1 }
+    - { ID: "HEAVY28-5-hbr", Count: 1 }
+HEAVY28-24:
+  Energy: 0.4800
+  Weight: 45.7900
+  Species:
+    - { ID: "HEAVY28-24-teh2", Count: 1 }
+    - { ID: "HEAVY28-24-h2s", Count: 1 }
+    - { ID: "HEAVY28-24-teh2_h2s", Count: -1 }
+MCONF-7:
+  Energy: 2.9200
+  Weight: 11.4300
+  Species:
+    - { ID: "MCONF-7-1", Count: -1 }
+    - { ID: "MCONF-7-8", Count: 1 }
+MCONF-22:
+  Energy: 5.3100
+  Weight: 11.4300
+  Species:
+    - { ID: "MCONF-22-1", Count: -1 }
+    - { ID: "MCONF-22-23", Count: 1 }
+MCONF-30:
+  Energy: 4.8600
+  Weight: 11.4300
+  Species:
+    - { ID: "MCONF-30-1", Count: -1 }
+    - { ID: "MCONF-30-31", Count: 1 }
+MCONF-42:
+  Energy: 7.3200
+  Weight: 11.4300
+  Species:
+    - { ID: "MCONF-42-1", Count: -1 }
+    - { ID: "MCONF-42-43", Count: 1 }
+WATER27-17:
+  Energy: 76.5000
+  Weight: 0.7000
+  Species:
+    - { ID: "WATER27-17-H2O", Count: 3 }
+    - { ID: "WATER27-17-H3Op", Count: 1 }
+    - { ID: "WATER27-17-H3OpH2O3", Count: -1 }
+WATER27-20:
+  Energy: 26.6000
+  Weight: 0.7000
+  Species:
+    - { ID: "WATER27-20-OHmH2O", Count: -1 }
+    - { ID: "WATER27-20-H2O", Count: 1 }
+    - { ID: "WATER27-20-OHm", Count: 1 }
+ADIM6-2:
+  Energy: 1.9900
+  Weight: 16.9300
+  Species:
+    - { ID: "ADIM6-2-AM3", Count: 2 }
+    - { ID: "ADIM6-2-AD3", Count: -1 }
+SIE4x4-7:
+  Energy: 31.3000
+  Weight: 1.6900
+  Species:
+    - { ID: "SIE4x4-7-he2+_1.5", Count: -1 }
+    - { ID: "SIE4x4-7-he+", Count: 1 }
+    - { ID: "SIE4x4-7-he", Count: 1 }
+SIE4x4-10:
+  Energy: 25.9000
+  Weight: 1.6900
+  Species:
+    - { ID: "SIE4x4-10-nh3+", Count: 1 }
+    - { ID: "SIE4x4-10-nh3", Count: 1 }
+    - { ID: "SIE4x4-10-nh32+_1.25", Count: -1 }
+ACONF-2:
+  Energy: 0.6140
+  Weight: 30.9900
+  Species:
+    - { ID: "ACONF-2-P_TG", Count: 1 }
+    - { ID: "ACONF-2-P_TT", Count: -1 }
+ACONF-5:
+  Energy: 0.5950
+  Weight: 30.9900
+  Species:
+    - { ID: "ACONF-5-H_ttt", Count: -1 }
+    - { ID: "ACONF-5-H_gtt", Count: 1 }
+ACONF-8:
+  Energy: 1.1780
+  Weight: 30.9900
+  Species:
+    - { ID: "ACONF-8-H_gtg", Count: 1 }
+    - { ID: "ACONF-8-H_ttt", Count: -1 }
+YBDE18-1:
+  Energy: 57.1700
+  Weight: 1.1500
+  Species:
+    - { ID: "YBDE18-1-f2s", Count: 1 }
+    - { ID: "YBDE18-1-cbh22", Count: 1 }
+    - { ID: "YBDE18-1-f2s-cbh22", Count: -1 }
