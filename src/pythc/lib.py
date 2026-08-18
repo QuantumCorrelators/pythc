@@ -9,12 +9,11 @@ import cotengra as ctg
 import numpy as np
 import opt_einsum as oe
 import psutil
-import pytblis as pt
 import pyscf.lib as pyscflib
+import pytblis as pt
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 from pyscf import df
-from pyscf.lib.exceptions import BasisNotFoundError
 
 logger = logging.getLogger()
 

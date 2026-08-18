@@ -17,18 +17,6 @@ This project implements Tensor Hypercontraction for use with Electron Repulsion 
 
 The project is not yet published to PyPI, so you will need to install it directly from Git.
 
-### Installing into an existing uv project (Recommended)
-
-This is the easiest way to install the project. You can create a new uv project using `uv init my-project-name`.
-
-If you already have a project set up using the [uv](https://docs.astral.sh/uv/) package manager, running:
-
-```shell
-uv add git+ssh://git@github.com/QuantumCorrelators/pythc.git
-```
-
-will add the package to your `pyproject.toml`.
-
 ### Installing into a virtual environment
 
 On Debian-based distributions, ensure that the following packages are installed and up to date: `python3`, `python3-pip`, `python3-venv`, `gcc`, `gfortran`, `libopenblas-dev`. (Tested on Ubuntu 24.04/26.04).
