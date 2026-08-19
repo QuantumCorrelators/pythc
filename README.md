@@ -36,7 +36,8 @@ source .venv/bin/activate
 Now install the project using:
 
 ```shell
-pip install git+ssh://git@github.com/QuantumCorrelators/pythc.git
+pip install --upgrade pip
+pip install git+https://github.com/QuantumCorrelators/pythc.git
 ```
 
 ### Installing with Conda / Mamba

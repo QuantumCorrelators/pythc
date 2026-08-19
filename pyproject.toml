@@ -10,7 +10,7 @@ dependencies = [
     "numpy (>=2.2.5,<2.6.0)",
     "pandas (>=2.2.3,<4.0.0)",
     "pyscf (>=2.9.0,<3.0.0)",
-    "scikit-learn (==1.7.1)",
+    "scikit-learn (>=1.7.1)",
     "gitpython (>=3.1.44,<4.0.0)",
     "acccholesky @ git+https://github.com/nikplx/Randomly-Pivoted-Cholesky.git@v0.1.10",
     "pytblis>=0.0.5",
