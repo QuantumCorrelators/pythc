@@ -2,7 +2,10 @@
 
 ![logo](pythc_logo.svg)
 
+
+
 Python-based implementations of Tensor Hypercontraction (THC).
+Preprint paper available at: https://arxiv.org/abs/2608.17885.
 
 ## Description
 
