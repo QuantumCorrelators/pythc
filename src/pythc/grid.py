@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Callable
 
 import numpy as np
-from pyscf import gto, dft
+from pyscf import gto, dft, pbc
 from pyscf.dft import treutler_prune
 
 from pythc.configurable import Configurable
@@ -35,3 +35,23 @@ class BeckeGrid(GridProvider):
         observe.log_metric("grid_points", len(grid.coords))
 
         return grid.coords, grid.weights
+
+
+class UniformGrid(GridProvider):
+    def __init__(self, cell: pbc.gto.Cell, e_cut: float = 100.0, wrap_around: bool = False):
+        self.cell = cell
+        self.spacing = np.pi/np.sqrt(2*e_cut)
+        self.wrap_around = wrap_around
+        self.mesh = None
+
+    def build(self) -> tuple[np.ndarray, np.ndarray]:
+        N1 = int(np.ceil(np.linalg.norm(self.cell.a[0]) / self.spacing))
+        N2 = int(np.ceil(np.linalg.norm(self.cell.a[1]) / self.spacing))
+        N3 = int(np.ceil(np.linalg.norm(self.cell.a[2]) / self.spacing))
+
+        self.mesh = [N1, N2, N3]
+
+        return self.cell.get_uniform_grids(mesh=self.mesh, wrap_around=self.wrap_around)
+
+
+

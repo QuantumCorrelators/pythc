@@ -91,6 +91,131 @@ class GramMetric(FunctionMatrix):
 
         return self._diag_values[vec]
 
+class SymMetricPBC(FunctionMatrix):
+    """
+    Gram metric for k-point periodic boundary conditions.
+
+    **AO mode** (X_v=None): compute the full-basis gram metric
+
+        S_{r,r'} = Σ_k | X[k,r,:]† · X[k,r,:'] |²                 (real, ≥ 0)
+
+    **OV mode** (X_v provided): compute the occupied-virtual gram metric
+
+        S_{r,r'} = Σ_k  (X_o[k,r,:]† · X_o[k,r,':])
+                       · conj(X_v[k,r,:]† · X_v[k,r,':])           (complex Hermitian)
+
+    Both formulae are derived from
+
+        S_{r,r'} = Σ_k Σ_{μν} [φ_μ^k(r) φ_ν^{-k}(r)]* [φ_μ^k(r') φ_ν^{-k}(r')]
+
+    using time-reversal symmetry φ^{-k}(r) = conj(φ^k(r)).
+
+    Parameters
+    ----------
+    X : ndarray, shape (k, n, p_o) — complex Bloch-function values on the grid.
+        In OV mode this is X_o (occupied block).
+    X_v : ndarray, shape (k, n, p_v) or None
+        Virtual block. If provided, OV mode is activated.
+    kpts : ndarray, shape (k, 3), optional
+        k-point coordinates (stored for downstream use, not needed internally).
+    """
+
+    def __init__(self, X, X_v=None, kpts=None):
+        assert X.ndim == 3, "X must have shape (k, n, p)"
+        if X_v is not None:
+            assert X_v.ndim == 3 and X_v.shape[:2] == X.shape[:2], \
+                "X_v must have shape (k, n, p_v) matching X on axes 0-1"
+
+        self.X = X           # (k, n, p_o) — occupied (or full AO)
+        self.X_v = X_v       # (k, n, p_v) — virtual, or None
+        self.kpts = kpts
+        self.k, self.n, self.p = X.shape
+        self._diag_values = None
+
+        super().__init__(self.n)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _inner_products(self, Xi, Xj, Xi_v=None, Xj_v=None):
+        """
+        Compute per-k inner products between two sets of grid slices.
+
+        Parameters
+        ----------
+        Xi, Xj : (k, m, p) — row slices of X for indices I and J.
+        Xi_v, Xj_v : (k, m, p_v) or None — corresponding virtual slices.
+
+        Returns
+        -------
+        AO mode  : (k, |I|, |J|) real array of |d^k_{ij}|²
+        OV mode  : (k, |I|, |J|) complex array of d_o^k · conj(d_v^k)
+        """
+        # d_o[k,i,j] = Xi[k,i,:]^H · Xj[k,j,:]
+        d_o = np.einsum('kip,kjp->kij', Xi.conj(), Xj)  # (k, |I|, |J|) complex
+
+        if Xi_v is None:                  # AO mode  →  |d_o|²  (real)
+            return d_o.real ** 2 + d_o.imag ** 2
+
+        # OV mode  →  d_o · conj(d_v)   (complex)
+        d_v = np.einsum('kip,kjp->kij', Xi_v.conj(), Xj_v)
+        return d_o * d_v.conj()
+
+    # ------------------------------------------------------------------
+    # FunctionMatrix interface
+    # ------------------------------------------------------------------
+
+    def _function(self, i, j):
+        """Return single element S[i[0], j[0]] — scalar (float or complex)."""
+        p, q = i[0], j[0]
+        Xi = self.X[:, [p], :]   # (k, 1, p_o)
+        Xj = self.X[:, [q], :]
+        Xi_v = self.X_v[:, [p], :] if self.X_v is not None else None
+        Xj_v = self.X_v[:, [q], :] if self.X_v is not None else None
+
+        prods = self._inner_products(Xi, Xj, Xi_v, Xj_v)  # (k, 1, 1)
+        val = prods.sum(axis=0)[0, 0]
+        return float(val) if np.isrealobj(val) else complex(val)
+
+    def _function_vec(self, vec_i, vec_j):
+        """Return element-wise S[vec_i[r], vec_j[r]] — 1-D array."""
+        # Gather paired rows: (len, k, p) → transpose to (k, len, p)
+        Xi   = self.X[:, vec_i, :]    # (k, len, p_o)
+        Xj   = self.X[:, vec_j, :]
+        Xi_v = self.X_v[:, vec_i, :] if self.X_v is not None else None
+        Xj_v = self.X_v[:, vec_j, :] if self.X_v is not None else None
+
+        prods = self._inner_products(Xi, Xj, Xi_v, Xj_v)  # (k, len, len)
+        # We only want the r-th diagonal of the (len×len) block for each k,
+        # i.e., prods[k, r, r]  summed over k.
+        return np.einsum('krr->r', prods)
+
+    def _function_mtx(self, vec_i, vec_j):
+        """Return submatrix S[vec_i, :][:, vec_j] — shape (|I|, |J|)."""
+        Xi   = self.X[:, vec_i, :]    # (k, |I|, p_o)
+        Xj   = self.X[:, vec_j, :]
+        Xi_v = self.X_v[:, vec_i, :] if self.X_v is not None else None
+        Xj_v = self.X_v[:, vec_j, :] if self.X_v is not None else None
+
+        prods = self._inner_products(Xi, Xj, Xi_v, Xj_v)  # (k, |I|, |J|)
+        return prods.sum(axis=0)                            # (|I|, |J|)
+
+    def _diag_helper(self, vec=None):
+        """Return diagonal elements S[r,r] — cached, always real and ≥ 0."""
+        if self._diag_values is None:
+            if self.X_v is None:
+                # AO: S[r,r] = Σ_k ||X[k,r,:]||⁴
+                norms_sq = (self.X.real ** 2 + self.X.imag ** 2).sum(axis=-1)  # (k, n)
+                self._diag_values = (norms_sq ** 2).sum(axis=0)                 # (n,)
+            else:
+                # OV: S[r,r] = Σ_k ||X_o[k,r,:]||² · ||X_v[k,r,:]||²
+                norms_o = (self.X.real ** 2 + self.X.imag ** 2).sum(axis=-1)    # (k, n)
+                norms_v = (self.X_v.real ** 2 + self.X_v.imag ** 2).sum(axis=-1)
+                self._diag_values = (norms_o * norms_v).sum(axis=0)              # (n,)
+
+        return self._diag_values if vec is None else self._diag_values[vec]
+
 
 class SymMetric(FunctionMatrix):
     def __init__(self, X):
