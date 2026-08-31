@@ -2,10 +2,11 @@ import logging
 import sys
 
 from pyscf import gto
+
 from pythc.methods.hf import THC_UHF
-from pythc.methods.mp2 import ump2_energy_laplace
-from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
+from pythc.methods.mp2 import LaplaceUMP2
 from pythc.thc.ls_aux_becke import LS_Aux_Becke
+from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
 
 logging.basicConfig(
     stream=sys.stdout, level=logging.INFO,
@@ -44,7 +45,7 @@ def main():
     thc = LS_Aux_Becke(mol=mol, fit_auxbasis='cc-pvqz', mo_coeff=mf.mo_coeff)
     eri_mo = thc.build_unrestricted(mode='ov')
 
-    mp2e = ump2_energy_laplace(mol, mf, eri_mo, n_laplace=10)
+    mp2e = LaplaceUMP2(mol, mf, eri_mo, n_laplace=10).kernel()
     print(f'MP2 E corr: {mp2e}')
 
 if __name__ == '__main__':

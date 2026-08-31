@@ -1,9 +1,16 @@
 [project]
 name = "pythc"
-version = "0.0.2"
-description = "Add your description here"
+version = "0.0.2rc1"
+description = "Python Tensor Hypercontraction (THC) library"
 readme = "README.md"
+authors = [{ name = "Niklas Paulicks", email = "niklas.paulicks@uni-hamburg.de" }]
 requires-python = ">=3.11"
+license = { text = "Apache Software License (Apache License 2.0)" } # or matching your LICENCE file
+keywords = ["quantum", "chemistry", "thc", "scf", "mp2"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
 
 dependencies = [
     "scipy (>=1.15.2,<2.0.0)",
@@ -22,7 +29,13 @@ dependencies = [
     "pymongo>=4.16.0",
     "basis-set-exchange>=0.12",
     "psutil>=7.2.2",
+    "kahypar>=1.3.7",
 ]
+
+
+[project.urls]
+Homepage = "https://github.com/QuantumCorrelators/pythc"
+Repository = "https://github.com/QuantumCorrelators/pythc"
 
 [project.optional-dependencies]
 cuda = [
@@ -64,7 +77,6 @@ python-preference = "managed"
 
 [tool.hatch.build.targets.sdist]
 exclude = [
-    "/benchmarks",
     "/.github",
 ]
 

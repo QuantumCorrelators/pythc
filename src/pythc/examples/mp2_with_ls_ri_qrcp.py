@@ -4,7 +4,7 @@ import sys
 from pyscf import gto, scf
 from pyscf.mp.dfmp2 import DFMP2
 
-from pythc.methods.mp2 import mp2_energy_laplace
+from pythc.methods.mp2 import LaplaceRMP2
 from pythc.thc.ls_ri_qrcp import LS_RI_QRCP
 
 logging.basicConfig(
@@ -42,7 +42,7 @@ def main():
     mp2_ref = DFMP2(mf).kernel()[0]
     print(f'MP2 RI Reference: {mp2_ref}')
 
-    mp2e = mp2_energy_laplace(mol, mf, eri, n_laplace=10)
+    mp2e = LaplaceRMP2(mol, mf, eri, n_laplace=10).kernel()
     print(f'MP2 E corr: {mp2e}')
 
 if __name__ == '__main__':

@@ -6,6 +6,7 @@
 
 Python-based implementations of Tensor Hypercontraction (THC).
 Preprint paper available at: https://arxiv.org/abs/2608.17885.
+The full code can be found at https://github.com/QuantumCorrelators/pythc.
 
 ## Description
 
