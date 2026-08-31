@@ -2,9 +2,9 @@ import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
-from acccholesky.lra import PSDLowRank
-from acccholesky.matrix import FunctionMatrix
-from acccholesky.rpcholesky import rpcholesky
+from pythc.decomp.acccholesky.lra import PSDLowRank
+from pythc.decomp.acccholesky.matrix import FunctionMatrix
+from pythc.decomp.acccholesky.rpcholesky import rpcholesky
 
 from pythc import lib
 

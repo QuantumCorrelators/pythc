@@ -14,19 +14,6 @@ resolution-markers = [
 ]
 
 [[package]]
-name = "acccholesky"
-version = "0.1.6"
-source = { git = "https://github.com/nikplx/Randomly-Pivoted-Cholesky.git?rev=v0.1.10#6181d76ab69a4b55cab59de7cd63f4436b08020f" }
-dependencies = [
-    { name = "dppy" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "scikit-learn" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-]
-
-[[package]]
 name = "altair"
 version = "6.2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -919,22 +906,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/8c/8b/57666417c0f90f08bcafa776861060426765fdb422eb10212086fb811d26/dnspython-2.8.0.tar.gz", hash = "sha256:181d3c6996452cb1189c4046c61599b84a5a86e099562ffde77d26984ff26d0f", size = 368251, upload-time = "2025-09-07T18:58:00.022Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl", hash = "sha256:01d9bbc4a2d76bf0db7c1f729812ded6d912bd318d3b1cf81d30c0f845dbf3af", size = 331094, upload-time = "2025-09-07T18:57:58.071Z" },
-]
-
-[[package]]
-name = "dppy"
-version = "0.3.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "matplotlib" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ab/74/a2bbcb284764a9ad739bda4a082770c304d977cb0b672790b9b149e8d475/dppy-0.3.3.tar.gz", hash = "sha256:cfd381b29c535e62dfb347636a54cb0a5e18fb5ca4f55e206dc9c5b14e3ba980", size = 93261, upload-time = "2024-08-14T20:46:06.447Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0e/dc/b04624d24be1f5512a2f48b9028b9fdc474907f84b5e2e3e4bf204b74757/dppy-0.3.3-py3-none-any.whl", hash = "sha256:a770d6b906a9939a156e8e6f86d9d3b880edc1df8639106bff60b18fc1b483ab", size = 83822, upload-time = "2024-08-14T20:46:04.74Z" },
 ]
 
 [[package]]
@@ -3368,7 +3339,6 @@ name = "pythc"
 version = "0.0.2"
 source = { editable = "." }
 dependencies = [
-    { name = "acccholesky" },
     { name = "basis-set-exchange" },
     { name = "cotengra" },
     { name = "gitpython" },
@@ -3417,7 +3387,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "acccholesky", git = "https://github.com/nikplx/Randomly-Pivoted-Cholesky.git?rev=v0.1.10" },
     { name = "basis-set-exchange", specifier = ">=0.12" },
     { name = "cotengra", specifier = ">=0.8.0" },
     { name = "cuda-toolkit", marker = "extra == 'cuda'", specifier = ">=13.1.1" },
