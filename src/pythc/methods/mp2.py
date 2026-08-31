@@ -702,3 +702,57 @@ def mp2_energy(mol: gto.Mole, mf: SCF, eri_thc: ERI) -> float:
     return mp2_e
 
 
+class RMP2:
+    def __init__(self, mol: gto.Mole, mf: SCF, eri_thc: ERI):
+        self.mol = mol
+        self.mf = mf
+        self.eri_thc = eri_thc
+
+    def kernel(self):
+        return mp2_energy(self.mol, self.mf, self.eri_thc)
+
+class LaplaceRMP2:
+    def __init__(self,mol: gto.Mole, mf: SCF, thc: ThcEri, n_laplace: int = 10):
+        self.mol = mol
+        self.mf = mf
+        self.thc = thc
+        self.n_laplace = n_laplace
+
+    def kernel(self):
+        return mp2_energy_laplace(self.mol, self.mf, self.thc, n_laplace=self.n_laplace)
+
+
+class LaplaceRMP2SCS:
+    def __init__(self,mol: gto.Mole, mf: SCF, thc: ThcEri, n_laplace: int = 10):
+        self.mol = mol
+        self.mf = mf
+        self.thc = thc
+        self.n_laplace = n_laplace
+
+    def kernel(self):
+        return mp2_energy_sos(self.mol, self.mf, self.thc, n_laplace=self.n_laplace)
+
+MP2 = LaplaceRMP2
+
+class LaplaceUMP2:
+    def __init__(self,mol: gto.Mole, mf: SCF, thc: ThcEriUnrestricted, n_laplace: int = 10):
+        self.mol = mol
+        self.mf = mf
+        self.thc = thc
+        self.n_laplace = n_laplace
+
+    def kernel(self):
+        return ump2_energy_laplace(self.mol, self.mf, self.thc, n_laplace=self.n_laplace)
+
+
+class LaplaceUMP2SOS:
+    def __init__(self,mol: gto.Mole, mf: SCF, thc: ThcEriUnrestricted, n_laplace: int = 10):
+        self.mol = mol
+        self.mf = mf
+        self.thc = thc
+        self.n_laplace = n_laplace
+
+    def kernel(self):
+        return ump2_energy_sos(self.mol, self.mf, self.thc, n_laplace=self.n_laplace)
+
+UMP2 = LaplaceRMP2

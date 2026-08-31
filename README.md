@@ -6,6 +6,7 @@
 
 Python-based implementations of Tensor Hypercontraction (THC).
 Preprint paper available at: https://arxiv.org/abs/2608.17885.
+The full code can be found at https://github.com/QuantumCorrelators/pythc.
 
 ## Description
 
@@ -39,8 +40,7 @@ source .venv/bin/activate
 Now install the project using:
 
 ```shell
-pip install --upgrade pip
-pip install git+https://github.com/QuantumCorrelators/pythc.git
+pip install pythc
 ```
 
 ### Installing with Conda / Mamba
@@ -50,7 +50,7 @@ To install the library in a new environment using Conda or Mamba:
 ```shell
 mamba create -n my_env python=3.12
 mamba activate my_env
-pip install git+ssh://git@github.com/QuantumCorrelators/pythc.git
+pip install pythc 
 ```
 
 ### Installing into an existing uv project 
@@ -60,7 +60,7 @@ This is the easiest way to install the project. You can create a new uv project 
 If you already have a project set up using the [uv](https://docs.astral.sh/uv/) package manager, running:
 
 ```shell
-uv add git+ssh://git@github.com/QuantumCorrelators/pythc.git
+uv add pythc 
 ```
 
 will add the package to your `pyproject.toml`.
@@ -145,8 +145,9 @@ thc_eri = ThcEri.from_file("path/to/place/eri.hdf5")
 
 With this THC ERI interface, you can implement improved quantum chemistry algorithms. This project currently implements:
 
-1. The HF-SCF algorithm (`THC_RHF` / `THC_UHF`)
-2. Møller-Plesset Perturbation Theory of 2nd order (`mp2_energy_laplace`)
+1. The HF-SCF algorithm 
+2. Møller-Plesset Perturbation Theory of 2nd order
+3. Random Phase Approximation (RPA)
 
 The HF-SCF implementations inherit from PySCF's `RHF`/`UHF` classes. We build in `ao` mode so the THC does not need to be rebuilt between SCF iterations:
 
@@ -176,14 +177,14 @@ To calculate a Laplace-transformed MP2 energy contribution with 10 integration p
 ```python
 from pythc.grid import BeckeGrid
 from pythc.thc.ls_ri_becke import LS_RI_Becke
-from pythc.methods.mp2 import mp2_energy_laplace
+from pythc.methods.mp2 import LaplaceRMP2
 
 grid_builder = BeckeGrid(mol)
 thc_builder = LS_RI_Becke(mol=mol, mo_coeff=mf.mo_coeff, grid=grid_builder,
                           auxbasis='cc-pvdz-ri')
 thc_eri = thc_builder.build(mode='ov')
 
-mp2_e_thc = mp2_energy_laplace(mol, mf, thc_eri, n_laplace=10)
+mp2_e_thc = LaplaceRMP2(mol, mf, thc_eri, n_laplace=10).kernel()
 ```
 
 The THC representation **must** be built in `mode='ov'` for the MP2 calculation.
