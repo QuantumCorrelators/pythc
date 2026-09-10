@@ -125,7 +125,7 @@ def contract_codensity_full_eri(self, X, mo_coeff):
 
 
 def build_aux_coulomb_inv(auxmol):
-    logger.info("Computing 2-center Coulomb metric and J^{-1/2}...")
+    logger.info("building auxiliary Coulomb inverse")
     j2c = auxmol.intor('int2c2e', aosym='s1')
     j2c_cholesky = lib.pseudo_inv_sqrt(j2c)
 
@@ -168,7 +168,7 @@ def compute_ao_slices(mol, auxmol):
     if start_shl < mol.nbas:
         blocks.append((start_shl, mol.nbas, ao_loc[start_shl], ao_loc[mol.nbas]))
 
-    logger.info(f"Dynamic Blocking: V_chunk budget = {v_budget_bytes / 1e6:.0f} MB. Processing in {len(blocks)} chunks.")
+    logger.info("AO blocking: budget=%.0f MB, n_blocks=%d", v_budget_bytes / 1e6, len(blocks))
 
     return blocks
 
@@ -176,14 +176,17 @@ def build_coulomb_matrix(mode: Mode, mol: gto.Mole, auxmol: gto.Mole, X, mo_coef
     n_occ = mol.nelectron // 2
     n_vir = mol.nao_nr() - n_occ
 
+    logger.info("building Coulomb matrix: X=%s, n_occ=%d", X.shape, n_occ)
     S = build_S(mode, X, n_occ)
     S_inv = lib.pinv(S)
     observe.checkpoint(METRIC_INVERSION)
+    logger.info("inverted metric: S=%s", S.shape)
 
     j2c_inv = build_aux_coulomb_inv(auxmol)
     E = contract_codensity_df_eri(mode, X, mo_coeff, mol, auxmol, j2c_inv, n_occ, n_vir)
 
     D = E @ S_inv
+    logger.info("built Coulomb matrix: D=%s", D.shape)
 
     return D
 
@@ -199,18 +202,23 @@ def build_coulomb_matrix_asym(mode: Mode, mol: gto.Mole, auxmol: gto.Mole, X_alp
     mo_coeff_beta = mo_coeff[1]
 
 
+    logger.info("building unrestricted Coulomb matrices: X_alpha=%s, X_beta=%s", X_alpha.shape, X_beta.shape)
     S_aa = build_S(mode, X_alpha, nocc_alpha)
     S_aa_inv = lib.pinv(S_aa)
+    logger.info("inverted alpha metric: S_aa=%s", S_aa.shape)
 
     S_bb = build_S(mode, X_beta, nocc_beta)
     S_bb_inv = lib.pinv(S_bb)
     observe.checkpoint(METRIC_INVERSION)
+    logger.info("inverted beta metric: S_bb=%s", S_bb.shape)
 
     j2c_inv = build_aux_coulomb_inv(auxmol)
+    logger.info("contracting alpha fitting matrix")
     E_aa = contract_codensity_df_eri(mode, X_alpha, mo_coeff_alpha,
                                      mol, auxmol, j2c_inv,
                                      nocc_alpha, nvir_alpha)
 
+    logger.info("contracting beta fitting matrix")
     E_bb = contract_codensity_df_eri(mode, X_beta, mo_coeff_beta,
                                      mol, auxmol, j2c_inv,
                                      nocc_beta, nvir_beta)
@@ -238,11 +246,11 @@ def contract_codensity_sri_eri(mode: Mode, X: np.ndarray, mo_coeff: np.ndarray, 
 
 
 def contract_codensity_df_eri(mode, X, mo_coeff, mol, auxmol, j2c_inv, n_occ, n_vir):
-    logger.info("Using DIRECT density fitting with 2D Chunking and pure BLAS contraction")
     p, n = X.shape
 
     n_aux = auxmol.nao_nr()
     n_ao = mol.nao_nr()
+    logger.info("contracting DF integrals: X=%s, n_aux=%d", X.shape, n_aux)
 
     if mode == 'ao':
         X_left = X
@@ -254,9 +262,13 @@ def contract_codensity_df_eri(mode, X, mo_coeff, mol, auxmol, j2c_inv, n_occ, n_
         X_right = pyscflib.dot(X[:, n_occ:], C_vir.T)
 
     W = np.zeros((n_aux, p))
+    blocks = compute_ao_slices(mol, auxmol)
+    n_blocks = len(blocks)
+    logger.info("processing AO blocks: n_blocks=%d", n_blocks)
 
-    for shl0, shl1, ao0, ao1 in compute_ao_slices(mol, auxmol):
-        logger.info(f"Direct DF: Processing AO shells {shl0}-{shl1} / {mol.nbas} (AOs {ao0}-{ao1})")
+    for i, (shl0, shl1, ao0, ao1) in enumerate(blocks):
+        logger.info("\tDF block %d/%d: shells %d-%d/%d (AOs %d-%d)",
+                    i + 1, n_blocks, shl0, shl1, mol.nbas, ao0, ao1)
 
         shls_slice = (shl0, shl1, 0, mol.nbas, 0, auxmol.nbas)
 
@@ -270,7 +282,7 @@ def contract_codensity_df_eri(mode, X, mo_coeff, mol, auxmol, j2c_inv, n_occ, n_
 
         del V_chunk
 
-    logger.info("Applying inverse metric to final grid...")
+    logger.info("applying Coulomb inverse: W=%s", W.shape)
     Y = pyscflib.dot(j2c_inv, W)
 
     return Y

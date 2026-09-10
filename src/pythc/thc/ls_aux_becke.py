@@ -64,7 +64,7 @@ class LS_Aux_Becke(THC):
             }
             for el in HEAVY_ELEMENTS:
                 basis[el] = fit_auxbasis + '-pp'
-            logger.info(f'using fit auxbasis: {basis}')
+            logger.info("using fit auxbasis: %s", basis)
 
             m.basis = basis
             m.ecp = mol.ecp
@@ -74,7 +74,7 @@ class LS_Aux_Becke(THC):
         else:
             self.fit_auxbasis = df.make_auxbasis(mol, mp2fit=True)
 
-        logger.info(f"build fit auxbasis: {str(self.fit_auxbasis)[:100]}")
+        logger.info("built fit auxbasis: n_aux=%d", self.fit_auxbasis.nao_nr() if hasattr(self.fit_auxbasis, "nao_nr") else -1)
         self.mo_coeff = mo_coeff if mo_coeff is not None and len(mo_coeff) > 0 else np.eye(mol.nao_nr())
 
 
@@ -102,9 +102,8 @@ class LS_Aux_Becke(THC):
         """
         auxmol = self.build_auxmol()
         observe.log_metric("fit_auxbasis_size", auxmol.nao_nr())
+        logger.info("building LS-Aux-Becke THC: mode=%s, n_fit_aux=%d", mode, auxmol.nao_nr())
 
-
-        logger.info("evaluating basis functions on grid")
         Xaux_pruned, X_pruned = self.get_pruned_grid(mode, auxmol)
 
         D = self.build_D(Xaux_pruned, auxmol)
@@ -143,12 +142,14 @@ class LS_Aux_Becke(THC):
         auxmol = self.build_auxmol()
         observe.log_metric("fit_auxbasis_size", auxmol.nao_nr())
 
-        logger.info("evaluating basis functions on grid")
+        logger.info("building LS-Aux-Becke THC unrestricted: n_fit_aux=%d", auxmol.nao_nr())
         Xaux_pruned, X_pruned_alpha, X_pruned_beta = self.get_pruned_grid(mode, auxmol)
+        logger.info("pruned grids: X_alpha=%s, X_beta=%s", X_pruned_alpha.shape, X_pruned_beta.shape)
 
         Y = self.build_D(Xaux_pruned, auxmol)
         Z = Y.T @ Y
         observe.checkpoint(FITTING_MATRIX)
+        logger.info("built unrestricted THC: Z=%s", Z.shape)
 
 
         return ThcEriUnrestricted(self.mol.nelectron, X_pruned_alpha, X_pruned_beta, Z, Z, Z)
@@ -159,6 +160,8 @@ class LS_Aux_Becke(THC):
         coords, weights = self.grid.build()
         observe.checkpoint(GRID_BUILD)
 
+        logger.info("built grid: grid=%d", len(coords))
+
         logger.info("evaluating basis functions on grid")
         Raux = eval_basefuncs(auxmol, coords)
         Xaux = np.sqrt(weights)[:, np.newaxis] * Raux
@@ -166,9 +169,10 @@ class LS_Aux_Becke(THC):
         R = eval_basefuncs(self.mol, coords)
         X = (np.sqrt(np.sqrt(weights))[:, np.newaxis] * R)
         observe.checkpoint(BASIS_FUNCTION_EVAL)
+        logger.info("evaluated basis functions on grid: R=%s, R_aux=%s", R.shape, Raux.shape)
 
         if self.prune:
-            logger.info("pruning active: reducing grid size")
+            logger.info("pruning grid: threshold=%.1e", self.cholesky_threshold)
 
             A = GramMetric(Xaux)
             L, piv, num_rank = self.cholesky_decomp.decompose(A, Xaux.shape[0], self.cholesky_threshold)
@@ -177,8 +181,9 @@ class LS_Aux_Becke(THC):
             X_aux_pruned = Xaux[piv, :]
             X_pruned = X[piv, :]
 
-            logger.info(f"selected {len(X_pruned)} pruned points from {len(coords)} parent")
             observe.checkpoint(GRID_PRUNING)
+            logger.info("pruned grid: %d -> %d points", len(coords), len(X_pruned))
+
         else:
             X_aux_pruned = Xaux
             X_pruned = X
@@ -198,13 +203,14 @@ class LS_Aux_Becke(THC):
             return X_aux_pruned, X_pruned
 
     def build_D(self, Xaux, auxmol) -> Any:
+        logger.info("building Coulomb factor: n_grid=%d, n_aux=%d", Xaux.shape[0], Xaux.shape[1])
         logger.info("computing auxiliary integrals")
         ints_2c2e = auxmol.intor('int2c2e')
 
-        logger.info("performing low-rank decomposition of (K|L) integrals")
+        logger.info("decomposing (K|L) integrals")
 
         L_out, piv, rank, info = dpstrf(ints_2c2e)
-        logger.info(f"(K|L) has numerical rank {rank}/{ints_2c2e.shape[0]}")
+        logger.info("(K|L) rank: %d/%d", rank, ints_2c2e.shape[0])
 
         piv = piv - 1
         U = np.triu(L_out[:rank, :])

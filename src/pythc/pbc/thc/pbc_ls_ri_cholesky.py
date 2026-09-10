@@ -31,8 +31,11 @@ class PBC_LS_RI_Cholesky(THC):
         self.grid_builder = UniformGrid(cell, e_cut)
 
     def build(self, mode: Mode = "ao") -> ThcEri:
+        logger.info("building PBC LS-RI-Cholesky THC: mode=%s", mode)
         grid = self.grid_builder.build()
+        logger.info("built uniform grid: grid=%d", len(grid))
         X = self.cell.pbc_eval_gto('GTOval_sph', coords=grid)
+        logger.info("evaluated Bloch AOs on grid: X=%s", X.shape)
 
         if mode == 'ov':
             X = X @ self.mo_coeff
@@ -47,13 +50,16 @@ class PBC_LS_RI_Cholesky(THC):
             raise NotImplementedError
 
         n_grid = X.shape[0]
+        logger.info("pruning grid: threshold=%.1e", self.cholesky_threshold)
         U, piv, num_rank = AccelRPCholesky().decompose(A, n_grid, self.cholesky_threshold)
         piv = piv[:num_rank]
         U = U[:, piv]
+        logger.info("pruned grid: %d -> %d points", n_grid, num_rank)
 
         X_pruned = X[piv, :]
 
         S_Lg = A._function_mtx(piv, np.arange(n_grid))
+        logger.info("built overlap metric: S_Lg=%s", S_Lg.shape)
 
         mesh = self.grid_builder.mesh  # [Nx, Ny, Nz]
         omega = self.cell.vol  # Unit cell volume
@@ -70,8 +76,10 @@ class PBC_LS_RI_Cholesky(THC):
         dV = omega / n_grid
         S_Lg_G = np.fft.fftn(S_Lg_3d, axes=(1, 2, 3)).reshape(num_rank, n_grid) * dV
 
+        logger.info("building Coulomb kernel via FFT: mesh=%s", mesh)
         V = (1.0 / omega) * (S_Lg_G.conj() * v_G) @ S_Lg_G.T
         V = np.real(V)
+        logger.info("built plane-wave Coulomb matrix: V=%s", V.shape)
 
         import scipy.linalg as sla
         A = sla.solve_triangular(U.T, V, lower=True)
@@ -80,6 +88,7 @@ class PBC_LS_RI_Cholesky(THC):
         C_T = sla.solve_triangular(U.T, B.T, lower=True)
         Z_T = sla.solve_triangular(U, C_T, lower=False)
         Z = Z_T.T
+        logger.info("built THC: X=%s, Z=%s", X_pruned.shape, Z.shape)
 
         return ThcEri(self.cell.nelectron, X_pruned, Z, None)
 
@@ -87,17 +96,20 @@ class PBC_LS_RI_Cholesky(THC):
         mesh = self.cell.mesh
         grid = self.cell.gen_uniform_grids(mesh)
         n_kpt = len(kpts)
-        logger.info(f"building k-points THC: n_grid={len(grid)}; n_kpts={n_kpt}; n_ao={self.cell.nao_nr()}; n_electron={self.cell.nelectron}")
+        logger.info("building k-points THC: grid=%d, kpts=%d, nao=%d, nelectron=%d",
+                    len(grid), n_kpt, self.cell.nao_nr(), self.cell.nelectron)
 
         # 1. Evaluate Bloch AOs on grid: shape (nkpt, ngrid, nao)
         X_kpt = np.ascontiguousarray(
             np.asarray(self.cell.pbc_eval_gto('GTOval', coords=grid, kpts=kpts), dtype=np.complex128)
         )
 
+        logger.info("evaluated Bloch AOs on grid: X=%s", X_kpt.shape)
         n_occ = self.cell.nelectron // 2
 
         if mode == 'ov':
             for k in range(len(kpts)):
+                logger.info("\tk-point %d/%d: MO transform", k + 1, n_kpt)
                 X_kpt[k] = X_kpt[k] @ self.mo_coeff[k]
             # Split into occupied / virtual blocks across all k-points
             X_o = X_kpt[:, :, :n_occ]  # (n_kpts, n_grid, n_occ)
@@ -109,20 +121,25 @@ class PBC_LS_RI_Cholesky(THC):
             raise NotImplementedError(f"mode={mode!r} not supported for build_kpts")
 
         n_grid = X_kpt.shape[1]
+        logger.info("pruning grid: threshold=%.1e", self.cholesky_threshold)
         _, piv, num_rank = AccelRPCholesky().decompose(A, n_grid, self.cholesky_threshold)
         piv = piv[:num_rank]
         X_kpt_pruned = np.ascontiguousarray(X_kpt[:, piv, :])
         n_grid_pruned = len(piv)
+        logger.info("pruned grid: %d -> %d points", n_grid, n_grid_pruned)
 
         # 3. Compute eta_kpt (pair density at grid) and Pi (metric at pivots)
         phase = get_supercell_phase(self.cell, kpts)
+        logger.info("contracting pair densities: X_pruned=%s", X_kpt_pruned.shape)
         eta_kpt = contract_fft_k(X_kpt_pruned, X_kpt, phase)         # (nkpt, nip, ngrid)
         Pi = contract_fft_k(X_kpt_pruned, X_kpt_pruned, phase)       # (nkpt, nip, nip)
+        logger.info("contracted pair densities: eta=%s, Pi=%s", eta_kpt.shape, Pi.shape)
 
         # 4. Compute Coulomb kernel W_q (coul_kpt)
         v0 = self.cell.get_Gv(mesh)
         Z_kpt = np.zeros((n_kpt, n_grid_pruned, n_grid_pruned), dtype=np.complex128)
 
+        logger.info("building Coulomb kernels: n_kpts=%d", n_kpt)
         for q in range(n_kpt):
             logger.info("\tk-point %d/%d: building Coulomb kernel", q + 1, n_kpt)
             fqs = np.exp(-1j * grid @ kpts[q])
@@ -138,6 +155,7 @@ class PBC_LS_RI_Cholesky(THC):
             Z_kpt[q] = Z_q * np.sqrt(n_grid)
             logger.info("\tk-point %d/%d: Z=%s", q + 1, n_kpt, Z_kpt[q].shape)
 
+        logger.info("built k-points THC: X=%s, Z=%s", X_kpt_pruned.shape, Z_kpt.shape)
         return ThcEri(self.cell.nelectron, X_kpt_pruned, Z_kpt, None)
 
     def build_unrestricted(self, mode: Mode = "ov") -> ThcEriUnrestricted:

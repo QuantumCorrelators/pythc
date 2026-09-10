@@ -20,11 +20,15 @@ class LS_RI_Becke(LS_RI_THC):
         return "ls_thc"
 
     def build_pruned_X(self, mode: Mode, mo_coeff: np.ndarray, auxmol) -> np.ndarray:
+        logger.info("building Becke grid: mode=%s", mode)
         grid, weights = self.grid.build()
+        logger.info("built grid: grid=%d", len(grid))
         R = eval_basefuncs(self.mol, coords=grid)
+        logger.info("evaluated basis functions on grid: R=%s", R.shape)
         X = np.sqrt(np.sqrt(weights))[:, np.newaxis] * R
 
         self.pruned_grid = grid
+        logger.info("built collocation matrix: X=%s", X.shape)
 
         return X
 

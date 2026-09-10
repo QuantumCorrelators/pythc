@@ -11,7 +11,7 @@ from pythc.thc.ls_thc_funcs import build_auxmol, build_aux_coulomb_inv, eval_bas
 from pythc.thc.thc_base import ThcEri, Mode, ThcEriUnrestricted, THC
 from pythc import observe
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 class LS_snRI_Cholesky(THC):
     """
@@ -53,29 +53,32 @@ class LS_snRI_Cholesky(THC):
 
     def build(self, mode: Mode = "ao") -> ThcEri:
 
+        logger.info("building snRI-Cholesky THC: mode=%s, nao=%d", mode, self.N)
         grid_dense, weights_dense = BeckeGrid(self.mol, level=1).build()
         grid_prune, weights_prune = self.grid.build()
         logger.info(f"built dense grid of size: {len(grid_dense)}, pruned grid of size: {len(grid_prune)}")
         observe.checkpoint(GRID_BUILD)
+        logger.info("built grids: dense=%d, prune=%d", len(grid_dense), len(grid_prune))
 
         R_dense = eval_basefuncs(self.mol, grid_dense)
         X_dense = (np.sqrt(np.sqrt(weights_dense))[:, np.newaxis] * R_dense)
         
         R_prune = eval_basefuncs(self.mol, grid_prune)
-        logger.info(f"got {R_dense.shape} basis function on dense grid matrix")
+        logger.info("evaluated basis functions: R_dense=%s, R_prune=%s", R_dense.shape, R_prune.shape)
         X_prune = (np.sqrt(np.sqrt(weights_prune))[:, np.newaxis] * R_prune)
         
         if mode != 'ao':
             X_dense = X_dense @ self.mo_coeff
             X_prune = X_prune @ self.mo_coeff
         observe.checkpoint(BASIS_FUNCTION_EVAL)
-        logger.info(f"using cholesky threshold: {self.cholesky_threshold}")
+        logger.info("pruning grid: threshold=%.1e", self.cholesky_threshold)
 
         n_occ = self.mol.nelectron // 2 if self.mol.nelectron > 1 else 1
 
         n_grid_prune = X_prune.shape[0]
 
         L, X_pruned, piv, _ = self.prune_grid(X_prune, n_grid_prune, n_occ, is_ao=(mode == 'ao'))
+        logger.info("pruned grid: %d -> %d points", n_grid_prune, X_pruned.shape[0])
         
         if mode == 'ao':
             S_Lg = (X_pruned @ X_dense.T) ** 2
@@ -87,7 +90,7 @@ class LS_snRI_Cholesky(THC):
             S_Lg = (X_o_pruned @ X_o_dense.T) * (X_v_pruned @ X_v_dense.T)
 
         observe.checkpoint(GRID_PRUNING)
-        logger.info("building BTD fitting matrices")
+        logger.info("building BTD fitting matrices: S_Lg will be %s", (X_pruned.shape[0], X_dense.shape[0]))
 
         auxmol = build_auxmol(self.mol, self.auxbasis)
         j2c_inv = build_aux_coulomb_inv(auxmol)
@@ -108,8 +111,8 @@ class LS_snRI_Cholesky(THC):
         D = self.build_coulomb_matrix_sep(L, A_LM.T)
         observe.checkpoint(METRIC_INVERSION)
 
-        logger.info("building coulomb kernel matrix")
         Z = D @ D.T
+        logger.info("built THC: X=%s, Z=%s", X_pruned.shape, Z.shape)
 
         return ThcEri(self.mol.nelectron, X_pruned, Z, D)
 
@@ -124,16 +127,17 @@ class LS_snRI_Cholesky(THC):
         mo_coeff_alpha = self.mo_coeff[0]
         mo_coeff_beta = self.mo_coeff[1]
 
+        logger.info("building snRI-Cholesky THC unrestricted: nao=%d", self.N)
         grid_dense, weights_dense = BeckeGrid(self.mol, level=1).build()
         grid_prune, weights_prune = self.grid.build()
         observe.checkpoint(GRID_BUILD)
 
-        logger.info("evaluating basis functions on grid")
+        logger.info("built grids: dense=%d, prune=%d", len(grid_dense), len(grid_prune))
         R_dense = eval_basefuncs(self.mol, coords=grid_dense)
         R_prune = eval_basefuncs(self.mol, coords=grid_prune)
 
-        logger.info("building metric matrix")
         X_dense = np.sqrt(np.sqrt(weights_dense))[:, np.newaxis] * R_dense
+        logger.info("evaluated basis functions: R_dense=%s, R_prune=%s", R_dense.shape, R_prune.shape)
         X_prune = np.sqrt(np.sqrt(weights_prune))[:, np.newaxis] * R_prune
 
         X_alpha_dense = X_dense @ mo_coeff_alpha
@@ -153,8 +157,11 @@ class LS_snRI_Cholesky(THC):
         B_gM = B_gM * np.sqrt(weights_dense)[:, np.newaxis]
 
         n_grid_prune = X_prune.shape[0]
+        logger.info("pruning grids: threshold=%.1e", self.cholesky_threshold)
         L_aa, X_alpha_pruned, piv_alpha, _ = self.prune_grid(X_alpha_prune, n_grid_prune, nocc_alpha)
+        logger.info("pruned alpha grid: %d -> %d points", n_grid_prune, X_alpha_pruned.shape[0])
         L_bb, X_beta_pruned, piv_beta, _ = self.prune_grid(X_beta_prune, n_grid_prune, nocc_beta)
+        logger.info("pruned beta grid: %d -> %d points", n_grid_prune, X_beta_pruned.shape[0])
 
         X_o_alpha_pruned = X_alpha_pruned[:, :nocc_alpha]
         X_v_alpha_pruned = X_alpha_pruned[:, nocc_alpha:]
@@ -183,6 +190,7 @@ class LS_snRI_Cholesky(THC):
 
         Z_ab = self.build_coulomb_matrix_asym(L_aa, Y_alpha.T, L_bb, Y_beta.T)
         observe.checkpoint(METRIC_INVERSION)
+        logger.info("built unrestricted THC: X_alpha=%s, X_beta=%s", X_alpha_pruned.shape, X_beta_pruned.shape)
 
         return ThcEriUnrestricted(self.mol.nelectron, X_alpha_pruned, X_beta_pruned, Z_aa, Z_bb, Z_ab)
 

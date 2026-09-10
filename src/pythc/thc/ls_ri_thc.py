@@ -83,17 +83,21 @@ class LS_RI_THC(THC):
             NotImplementedError: If the fitting mode is not 'ao' or 'ov'.
         """
 
+        logger.info("building LS-RI-THC: mode=%s, nao=%d, auxbasis=%s", mode, self.N, self.auxbasis)
         auxmol = build_auxmol(self.mol, self.auxbasis)
+        logger.info("built auxmol: n_aux=%d", auxmol.nao_nr())
 
         X = self.build_pruned_X(mode, self.mo_coeff, auxmol)
         if mode == 'ov':
             X = X @ self.mo_coeff
+        logger.info("pruned grid: X=%s", X.shape)
 
         observe.checkpoint(GRID_PRUNING)
 
         D = build_coulomb_matrix(mode, self.mol, auxmol, X, self.mo_coeff)
         Z = D.T @ D
         observe.checkpoint(FITTING_MATRIX)
+        logger.info("built THC: X=%s, Z=%s", X.shape, Z.shape)
 
         return ThcEri(self.mol.nelectron, X, Z, D.T)
 
@@ -131,7 +135,9 @@ class LS_RI_THC(THC):
         if mode == 'ao':
             raise NotImplementedError("fitting an unrestricted THC in AO mode is currently not supported")
 
+        logger.info("building LS-RI-THC unrestricted: mode=%s, nao=%d", mode, self.N)
         auxmol = build_auxmol(self.mol, self.auxbasis)
+        logger.info("built auxmol: n_aux=%d", auxmol.nao_nr())
 
         S = self.mol.spin
         nocc_alpha = (self.mol.nelectron + S) // 2
@@ -141,16 +147,19 @@ class LS_RI_THC(THC):
 
         if nocc_alpha == 0 or nocc_beta == 0:
             grid, weights = self.grid.build()
+            logger.info("built fallback grid: grid=%d", len(grid))
             R = eval_basefuncs(self.mol, coords=grid)
             X = np.sqrt(np.sqrt(weights))[:, np.newaxis] * R
 
         if nocc_alpha > 0:
             X_alpha = self.build_pruned_X(mode, mo_coeff_alpha, auxmol)
+            logger.info("pruned alpha grid: X_alpha=%s", X_alpha.shape)
         else:
             X_alpha = X
 
         if nocc_beta > 0:
             X_beta = self.build_pruned_X(mode, mo_coeff_beta, auxmol)
+            logger.info("pruned beta grid: X_beta=%s", X_beta.shape)
         else:
             X_beta = X
 
@@ -161,5 +170,7 @@ class LS_RI_THC(THC):
 
         Z_aa, Z_bb, Z_ab = build_coulomb_matrix_asym(mode, self.mol, auxmol, X_alpha, X_beta, self.mo_coeff)
         observe.checkpoint(FITTING_MATRIX)
+        logger.info("built unrestricted THC: X_alpha=%s, X_beta=%s, Z_aa=%s, Z_bb=%s",
+                    X_alpha.shape, X_beta.shape, Z_aa.shape, Z_bb.shape)
 
         return ThcEriUnrestricted(self.mol.nelectron, X_alpha, X_beta, Z_aa, Z_bb, Z_ab)

@@ -81,17 +81,17 @@ class LS_RI_Cholesky(THC):
         grid, weigths = self.grid.build()
         observe.checkpoint(GRID_BUILD)
 
-        logger.info(f"built grid of size: {len(grid)}")
+        logger.info("building LS-RI-Cholesky THC: mode=%s, grid=%d, nao=%d", mode, len(grid), self.N)
 
         R = eval_basefuncs(self.mol, grid)  # (grid, N)
-        logger.info(f"got {R.shape} basis function on grid matrix")
+        logger.info("evaluated basis functions on grid: R=%s", R.shape)
 
         X = (np.sqrt(np.sqrt(weigths))[:, np.newaxis] * R)
         if mode != 'ao':
             X = X @ self.mo_coeff
 
         observe.checkpoint(BASIS_FUNCTION_EVAL)
-        logger.info(f"using cholesky threshold: {self.cholesky_threshold}")
+        logger.info("pruning grid: threshold=%.1e", self.cholesky_threshold)
 
         n_occ = self.mol.nelectron // 2
         n_virt = self.N - n_occ
@@ -112,19 +112,21 @@ class LS_RI_Cholesky(THC):
         X_pruned = X[piv, :]
 
         observe.checkpoint(GRID_PRUNING)
-        logger.info(f"building fitting matrix")
+        logger.info("pruned grid: %d -> %d points", n_grid, num_rank)
 
         auxmol = build_auxmol(self.mol, self.auxbasis)
         j2c_inv = build_aux_coulomb_inv(auxmol)
-        logger.info("building coulomb kernel matrix")
+        logger.info("building fitting matrix: n_aux=%d, X=%s", auxmol.nao_nr(), X_pruned.shape)
 
         Y = contract_codensity_df_eri(mode, X_pruned, self.mo_coeff, self.mol, auxmol, j2c_inv, n_occ, n_virt)
         observe.checkpoint(FITTING_MATRIX)
 
         D = self.build_coulomb_matrix_sep(L, Y)
         observe.checkpoint(METRIC_INVERSION)
+        logger.info("solved Coulomb metric: D=%s", D.shape)
 
         Z = D @ D.T
+        logger.info("built THC: X=%s, Z=%s", X_pruned.shape, Z.shape)
 
         return ThcEri(self.mol.nelectron, X_pruned, Z, D)
 
@@ -165,11 +167,11 @@ class LS_RI_Cholesky(THC):
 
         grid, weights = self.grid.build()
         observe.checkpoint(GRID_BUILD)
+        logger.info("building LS-RI-Cholesky THC unrestricted: grid=%d, nao=%d", len(grid), N)
 
-        logger.info("evaluating basis functions on grid")
         R = eval_basefuncs(self.mol, coords=grid)
+        logger.info("evaluated basis functions on grid: R=%s", R.shape)
 
-        logger.info("building metric matrix")
         X = np.sqrt(np.sqrt(weights))[:, np.newaxis] * R
 
         X_alpha = X @ mo_coeff_alpha
@@ -178,17 +180,18 @@ class LS_RI_Cholesky(THC):
 
         n_grid = X.shape[0]
 
-        logger.info(f"using cholesky threshold: {self.cholesky_threshold}")
+        logger.info("pruning grids: threshold=%.1e", self.cholesky_threshold)
         L_aa, X_alpha_pruned_aa = self.prune_grid(X_alpha, n_grid, nocc_alpha)
+        logger.info("pruned alpha grid: %d -> %d points", n_grid, X_alpha_pruned_aa.shape[0])
         L_bb, X_beta_pruned_bb = self.prune_grid(X_beta, n_grid, nocc_beta)
+        logger.info("pruned beta grid: %d -> %d points", n_grid, X_beta_pruned_bb.shape[0])
 
         observe.checkpoint(GRID_PRUNING)
-        logger.info(f"building fitting matrices")
 
         auxmol = build_auxmol(self.mol, self.auxbasis)
         j2c_inv = build_aux_coulomb_inv(auxmol)
-
-        logger.info("building coulomb kernel matrices")
+        logger.info("building fitting matrices: n_aux=%d, X_alpha=%s, X_beta=%s",
+                    auxmol.nao_nr(), X_alpha_pruned_aa.shape, X_beta_pruned_bb.shape)
 
         Y_alpha = contract_codensity_df_eri(mode, X_alpha_pruned_aa, mo_coeff_alpha, self.mol, auxmol, j2c_inv, nocc_alpha, nvir_alpha)
         Y_beta = contract_codensity_df_eri(mode, X_beta_pruned_bb, mo_coeff_beta, self.mol, auxmol, j2c_inv, nocc_beta, nvir_beta)
@@ -203,6 +206,8 @@ class LS_RI_Cholesky(THC):
 
         Z_ab = self.build_coulomb_matrix_asym(L_aa, Y_alpha, L_bb, Y_beta)
         observe.checkpoint(METRIC_INVERSION)
+        logger.info("built unrestricted THC: X_alpha=%s, X_beta=%s, Z_aa=%s, Z_bb=%s",
+                    X_alpha_pruned_aa.shape, X_beta_pruned_bb.shape, Z_aa.shape, Z_bb.shape)
 
         return ThcEriUnrestricted(self.mol.nelectron, X_alpha_pruned_aa, X_beta_pruned_bb, Z_aa, Z_bb, Z_ab)
 

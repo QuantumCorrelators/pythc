@@ -100,23 +100,23 @@ class LS_RI_QRCP(LS_RI_THC):
         grid, weigths = self.grid.build()
         observe.checkpoint(GRID_BUILD)
 
-        logger.info(f"built grid of size: {len(grid)}")
+        logger.info("building QRCP grid: grid=%d, nao=%d, keep_rows=%d", len(grid), self.N, self.keep_rows)
 
         Rs = eval_basefuncs(self.mol, grid)  # Renamed for clarity
         Rs = (np.sqrt(np.sqrt(weigths))[:, np.newaxis] * Rs)
-        logger.info(f"got {Rs.shape} basis function on grid matrix")
+
         observe.checkpoint(BASIS_FUNCTION_EVAL)
+        logger.info("evaluated basis functions on grid: R=%s", Rs.shape)
 
         rows, cols = np.triu_indices(self.N, k=0)
 
-        logger.info(f"computing product densities with {self.N}x{self.N} basis functions")
-
         n_pairs = len(rows)
         n_grid = len(grid)
+        logger.info("computing product densities: pairs=%d", n_pairs)
         r_requested = self.N * self.keep_rows if self.keep_rows < self.N else n_pairs
 
         if r_requested < n_pairs:
-            logger.info(f"Sketching active: compressing {n_pairs} pairs to {r_requested} auxiliary rows")
+            logger.info("sketching codensity: pairs=%d -> rows=%d", n_pairs, r_requested)
             
             # The product densities should be in the AO basis for the ISDF selection process
             etas = np.array([_random_unit() for _ in range(n_pairs)])
@@ -132,9 +132,10 @@ class LS_RI_QRCP(LS_RI_THC):
             block_size = 2048
             n_blocks = (n_grid + block_size - 1) // block_size
             
-            logger.info(f"processing in {n_blocks} blocks of size {block_size}")
+            logger.info("sketching grid blocks: n_blocks=%d, block_size=%d", n_blocks, block_size)
             
             for b in range(n_blocks):
+                logger.info("\tsketch block %d/%d", b + 1, n_blocks)
                 start = b * block_size
                 end = min((b + 1) * block_size, n_grid)
                 b_size = end - start
@@ -152,12 +153,12 @@ class LS_RI_QRCP(LS_RI_THC):
                 # Extract chosen rows
                 M_sketch[:, start:end] = rho_block[chosen_rows, :]
                 
-            logger.info(f"performing QR decomposition with pivoting, pruning threshold: {self.pruning_threshold}")
+            logger.info("QRCP on sketched matrix: threshold=%.1e", self.pruning_threshold)
 
             R, piv, _, _, _ = sp.linalg.lapack.zgeqp3(M_sketch, overwrite_a=1)
         else:
             # these cases are so small we can copy safely
-            logger.info(f"performing QR decomposition with pivoting, pruning threshold: {self.pruning_threshold}")
+            logger.info("QRCP on exact codensity: threshold=%.1e", self.pruning_threshold)
             rho_initial = Rs[:, rows] * Rs[:, cols]
             rho = np.asfortranarray(rho_initial.swapaxes(0, 1))
             R, piv, _, _, _ = sp.linalg.lapack.dgeqp3(rho, overwrite_a=1)
@@ -176,7 +177,7 @@ class LS_RI_QRCP(LS_RI_THC):
         else:
             N_aux = 0
 
-        logger.info(f"Pruned to {N_aux} auxiliary functions (Max val: {R_diag[0]:.2e})")
+        logger.info("pruned grid: %d points (R_max=%.2e)", N_aux, R_diag[0])
 
         if N_aux == 0:
             raise ValueError("ISDF pruning removed all auxiliary functions. Check threshold or basis.")
@@ -185,6 +186,6 @@ class LS_RI_QRCP(LS_RI_THC):
         self.pruned_coords = grid[x_mu]
 
         # Select AO values at interpolating points and then transform to MO basis
-        logger.info(f"transforming to MO basis at {N_aux} interpolating points")
+        logger.info("built pruned collocation matrix: X=%s", (N_aux, Rs.shape[1]))
         X = Rs[x_mu, :]
         return X

@@ -88,11 +88,15 @@ class LS_RI_KMeans(LS_RI_THC):
             total_grid_size += len(atom_coords)
 
         observe.log_metric("grid_points", total_grid_size)
+        logger.info("building KMeans grid: parent=%d, n_aux=%d, ips_per_naux=%.2f",
+                    int(total_grid_size), n_aux, self.ips_per_naux)
         requested_grid_size = (n_aux*self.ips_per_naux)
         if requested_grid_size>total_grid_size:
-            logger.warning('Attempting to build a bigger grid than the parent. Falling back to full parent grid size')
+            logger.warning("requested grid %d exceeds parent %d; using parent size",
+                         int(requested_grid_size), int(total_grid_size))
             requested_grid_size=total_grid_size
 
+        n_atoms = len(coords)
         for aidx, (atom_coords, atom_weights, atom_p_weights) in enumerate(zip(coords, weights, partition_weights)):
             kdtree = KDTree(atom_coords)
 
@@ -102,7 +106,7 @@ class LS_RI_KMeans(LS_RI_THC):
 
             n_clusters = int((len(atom_coords)/total_grid_size)*requested_grid_size)
 
-            logger.info(f"atom grid: {len(atom_coords)} -> nclusters={n_clusters}")
+            logger.info("\tatom %d/%d: grid=%d -> clusters=%d", aidx + 1, n_atoms, len(atom_coords), n_clusters)
             kmeans = KMeans(n_clusters=n_clusters, max_iter=1_000, random_state=aidx)
 
             n_occ = self.mol.nelectron // 2
@@ -131,6 +135,7 @@ class LS_RI_KMeans(LS_RI_THC):
             self.pruned_weights.append(density[idxs])  # <--- ADD [idxs] HERE
 
         X_pruned = np.vstack(X)
+        logger.info("built pruned collocation matrix: X=%s", X_pruned.shape)
 
         return X_pruned
 
