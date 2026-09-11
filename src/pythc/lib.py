@@ -3,7 +3,6 @@ import json
 import logging
 import os
 import subprocess
-from typing import Any
 
 import cotengra as ctg
 import numpy as np
@@ -11,8 +10,6 @@ import opt_einsum as oe
 import psutil
 import pyscf.lib as pyscflib
 import pytblis as pt
-from matplotlib import pyplot as plt
-from matplotlib.colors import LogNorm
 from pyscf import df
 
 logger = logging.getLogger()
@@ -243,57 +240,6 @@ def to_backend(*inputs, dtype=None):
     if return_single:
         return out_arrays[0]
     return tuple(out_arrays)
-
-
-def plot_grid_with_density(all_center_coords: list[Any], all_densities: list[Any],
-                           all_grid_coords: list[Any]):
-    # --- VISUALIZATION BLOCK ---
-    logger.info("Generating 2D grid projection plot...")
-    grid_pts = np.vstack(all_grid_coords)
-    center_pts = np.vstack(all_center_coords)
-
-    plt.figure(figsize=(15, 15))
-
-    # Plot the full Becke grid in light gray
-    # plt.scatter(grid_pts[:, 0], grid_pts[:, 1], , s=1, alpha=0.3, label='Full Becke Grid')
-    if len(all_densities) > 0:
-        densities_flat = np.concatenate(all_densities)
-        densities_flat = np.clip(densities_flat, a_min=1e-12, a_max=None)
-        scatter = plt.scatter(grid_pts[:, 0], grid_pts[:, 1],
-                              c=densities_flat, cmap='viridis', norm=LogNorm(),
-                              s=1, alpha=0.6, label='Grid Points (Colored by Density)')
-        plt.colorbar(scatter, label='Density Value (Log Scale)')
-    else:
-        plt.scatter(grid_pts[:, 0], grid_pts[:, 1], c='lightgray', s=1, alpha=0.3, label='Full Becke Grid')
-
-    # Plot the selected KMeans centers in red
-    plt.scatter(center_pts[:, 0], center_pts[:, 1], c='red', s=1, alpha=0.8, label='Selected Centers')
-
-    # Plot the atomic nuclei as large black X's
-    # plt.scatter(nuclei[:, 0], nuclei[:, 1], c='black', s=150, marker='X', label='Nuclei')
-
-    plt.title('2D Projection (XY Plane) of Grid Points and KMeans Centers')
-    plt.xlabel('X coordinate (Bohr)')
-    plt.ylabel('Y coordinate (Bohr)')
-    plt.axis('equal')  # Crucial to ensure the molecule's geometry isn't visually warped
-    plt.legend()
-    plt.show()
-    # ---------------------------
-
-def plot_sparsity(A):
-    sorted_vals = np.sort(np.abs(A.ravel()))
-    sorted_vals = sorted_vals[sorted_vals > 1e-12]
-
-    # 2. Calculate cumulative percentages for the y-axis
-    percentages = 100. * np.arange(1, len(sorted_vals) + 1) / len(sorted_vals)
-
-    # 3. Plot
-    plt.plot(sorted_vals, percentages)
-    plt.xscale('log')
-    plt.xlabel('Absolute Value |A_ij|')
-    plt.ylabel('Percentage of Elements Below Value (%)')
-    plt.grid(True, which="both", ls="--")
-    plt.show()
 
 def get_dfo(mol, auxbasis):
     dfo = df.DF(mol, auxbasis=auxbasis)
