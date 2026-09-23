@@ -34,9 +34,7 @@ def main():
 
     mf = THC_UHF(mol=mol,
                  eri_thc=ao_eri,
-                 auxbasis=auxbasis,
-                 thc_threshold=0.1,
-                 min_exact_cycles=1)
+                 auxbasis=auxbasis)
 
     mf.kernel()
 

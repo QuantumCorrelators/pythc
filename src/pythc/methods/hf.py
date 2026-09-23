@@ -1,91 +1,58 @@
 import logging
 
-import cotengra as ctg
 import numpy as np
+import pyscf.lib as pyscflib
 from pyscf import gto, df
+from pyscf.scf import ghf
+from pyscf.scf.ghf import GHF
 from pyscf.scf.hf import RHF
 from pyscf.scf.uhf import UHF
-import pyscf.lib as pyscflib
 
-import pythc.lib as lib
+from pythc.methods.thc_df import THCDF
 from pythc.thc.thc_base import ThcEri
 
 logger = logging.getLogger()
 
+# J/K kernels live in THCDF (pythc.methods.thc_df), exposed as
+# ``self.with_df``. The SCF classes below are a thin density-difference
+# wrapper: exact DF baseline on the first cycle, THC on ``dm - ref_dm``
+# afterwards, plus spin combining and the RHF/UHF/GHF Fock factors.
+
+
 class THCMixin:
     """
-    Base mixin class implementing the common density difference ansatz,
-    DIIS reset logic, and energy threshold tracking for THC-SCF calculations.
+    Thin density-difference wrapper around the THC J/K engine.
+
+    The first SCF cycle builds an exact DF baseline; every later cycle
+    evaluates THC on the density difference only and adds it to the frozen
+    baseline. Pure THC (no baseline) is served by stock PySCF SCF with
+    ``mf.with_df = THCDF(...)``.
     """
     def init_thc(self, mol: gto.Mole, eri_thc: ThcEri, auxbasis: str = None,
-                 min_exact_cycles: int = None, thc_threshold: float = None,
-                 verbose: int = 0, dtype = np.float64,
-                 thc_only: bool = False, use_thc_only: bool = None):
-        eri_thc.to_backend()
-        X, Z = eri_thc.get_X_Z()
-        self.X, self.Z = X, Z
-
+                 verbose: int = 0,
+                 with_j_thc: bool = True, with_k_thc: bool = True):
         self.verbose = verbose
         self.max_cycle = 200
         self.conv_tol = 1e-9
         self.direct_scf = True
         self.auxbasis = auxbasis
         self.cycles = 0
-        self.dtype = dtype
         self.diis = pyscflib.diis.DIIS
 
-        self.thc_only = bool(thc_only or (use_thc_only if use_thc_only is not None else False))
-        self.min_exact_cycles = min_exact_cycles if min_exact_cycles is not None else 1
-        self.thc_threshold = thc_threshold if thc_threshold is not None else 0.1
-
-        if self.thc_only:
-            logger.info("configured SCF runner: Pure THC mode (no exact DF cycles, no RI ERI built)")
-        else:
-            logger.info(f"configured SCF runner: at least {self.min_exact_cycles} exact cycles or converge to <={self.thc_threshold}")
-
-        self.optimizer = ctg.ReusableHyperOptimizer(
-            minimize='combo',
-            slicing_opts={'target_size': lib.cotengra_target_size(bytes_per_float=np.dtype(dtype).itemsize)},
-            progbar=False,
-            max_time=10.0
-        )
-
-        N = mol.nao_nr()
-        self.contract_j_tree = ctg.einsum_tree(
-            'mn,Pm,Pn,PQ,Ql,Qs->ls',
-            (N, N), X.shape, X.shape, Z.shape, X.shape, X.shape,
-            optimize=self.optimizer
-        )
-        self.contract_k_tree = ctg.einsum_tree(
-            'mn,Pm,Pl,PQ,Qn,Qs->ls',
-            (N, N), X.shape, X.shape, Z.shape, X.shape, X.shape,
-            optimize=self.optimizer
-        )
-
-        self.current_e = None
-        self.last_e = None
-        self.e_diff = float('inf')
-        self.thc_active = self.thc_only
         self.ref_dm = None
         self.ref_vhf = None
 
-        if not self.thc_only:
-            self.df_obj = df.DF(mol)
-            if self.auxbasis:
-                self.df_obj.auxbasis = self.auxbasis
-        else:
-            self.df_obj = None
+        self.df_obj = df.DF(mol)
+        if self.auxbasis:
+            self.df_obj.auxbasis = self.auxbasis
 
-    def energy_tot(self, dm=None, h1e=None, vhf=None):
-        """Override to intercept and track the total energy."""
-        e = super().energy_tot(dm, h1e, vhf)
-
-        self.last_e = self.current_e
-        self.current_e = e
-        if self.last_e is not None:
-            self.e_diff = abs(self.current_e - self.last_e)
-
-        return e
+        # Single DF-style J/K engine. It shares the exact DF object as its
+        # internal baseline, so the DF-ERI is built at most once. Flip
+        # with_df.with_j_thc / .with_k_thc for THC/DF routing per term
+        # (with_j_thc=False selects "only-K": J via DF/RI, K via THC).
+        self.with_df = THCDF(mol, eri_thc, auxbasis,
+                             baseline=self.df_obj,
+                             with_j_thc=with_j_thc, with_k_thc=with_k_thc)
 
     def get_veff(self, mol=None, dm=None, dm_last=0, vhf_last=0, hermi=1):
         if mol is None: mol = self.mol
@@ -93,29 +60,13 @@ class THCMixin:
 
         self.cycles += 1
 
-        if self.thc_only:
-            vj_thc, vk_thc = self.get_jk_thc(dm, hermi=hermi)
-            return self._combine_thc_vhf(0, vj_thc, vk_thc)
-
-        # Check the exact cycle minimum and the convergence threshold
-        if not self.thc_active and (self.cycles <= self.min_exact_cycles or (self.e_diff >= self.thc_threshold)):
-            logger.info(f"SCF Cycle {self.cycles}: Computing DF V_HF baseline (e_diff = {self.e_diff:.4f} Eh)")
-
+        if self.ref_dm is None:
+            logger.info(f"SCF Cycle {self.cycles}: exact DF baseline")
             self.ref_dm = np.asarray(dm)
             self.ref_vhf = self._exact_vhf(mol, dm, hermi)
-
             return self.ref_vhf
 
-        # Switch to THC once below the threshold
-        if not self.thc_active:
-            logger.info(f"SCF Cycle {self.cycles}: Energy diff {self.e_diff:.4f} < {self.thc_threshold}. Switching to THC.")
-            self.thc_active = True
-
-            # Reset DIIS history due to the numerical discontinuity of the V_HF evaluation switch
-            if hasattr(self, 'diis') and self.diis:
-                self.diis.space = 0
-
-        # Perform the Density Difference Ansatz
+        # Density Difference Ansatz: THC sees only dm - ref_dm.
         ddm = np.asarray(dm) - self.ref_dm
         vj_thc, vk_thc = self.get_jk_thc(ddm, hermi=hermi)
 
@@ -133,11 +84,11 @@ class THCMixin:
 
 class THC_UHF(THCMixin, UHF):
     def __init__(self, mol: gto.Mole, eri_thc, auxbasis: str = None,
-                 min_exact_cycles=0, thc_threshold=100,
-                 verbose=4, dtype=np.float64,
-                 thc_only: bool = False, use_thc_only: bool = None):
+                 verbose: int = 4,
+                 with_j_thc: bool = True, with_k_thc: bool = True):
         UHF.__init__(self, mol)
-        self.init_thc(mol, eri_thc, auxbasis, min_exact_cycles, thc_threshold, verbose, dtype, thc_only, use_thc_only)
+        self.init_thc(mol, eri_thc, auxbasis, verbose=verbose,
+                      with_j_thc=with_j_thc, with_k_thc=with_k_thc)
 
     def _exact_vhf(self, mol, dm, hermi):
         vj, vk = self.df_obj.get_jk(dm, hermi=hermi)
@@ -151,61 +102,29 @@ class THC_UHF(THCMixin, UHF):
     def get_jk_thc(self, dm=None, hermi=1, with_j=True, with_k=True):
         if dm is None: dm = self.make_rdm1()
         dm = np.asarray(dm)
-
-        # UHF dm has shape (2, N, N) for a single batch
-        is_batch = (dm.ndim == 4)
-        if not is_batch:
-            dms = dm[:, np.newaxis, ...]
-        else:
-            dms = dm
-
-        vj = np.zeros_like(dms) if with_j else None
-        vk = np.zeros_like(dms) if with_k else None
-        X, Z = self.X, self.Z
-
-        for i in range(dms.shape[1]):
-            p_mat_a = lib.to_backend(dms[0, i])
-            p_mat_b = lib.to_backend(dms[1, i])
-
-            if with_j:
-                p_mat_tot = p_mat_a + p_mat_b
-                j_tot = self.contract_j_tree.contract([p_mat_tot, X, X, Z, X, X])
-                if lib.has_cuda_gpu(): j_tot = j_tot.get()
-
-                if hermi == 1:
-                    j_tot = 0.5 * (j_tot + j_tot.T)
-
-                vj[0, i] = j_tot
-                vj[1, i] = j_tot
-
-            if with_k:
-                k_a = self.contract_k_tree.contract([p_mat_a, X, X, Z, X, X])
-                if lib.has_cuda_gpu(): k_a = k_a.get()
-
-                k_b = self.contract_k_tree.contract([p_mat_b, X, X, Z, X, X])
-                if lib.has_cuda_gpu(): k_b = k_b.get()
-
-                if hermi == 1:
-                    k_a = 0.5 * (k_a + k_a.T)
-                    k_b = 0.5 * (k_b + k_b.T)
-
-                vk[0, i] = k_a
-                vk[1, i] = k_b
-
-        if not is_batch:
-            if with_j: vj = vj[:, 0, ...]
-            if with_k: vk = vk[:, 0, ...]
-
+        # No uhf.get_jk module splitter exists (unlike ghf.get_jk), so the
+        # one UHF-specific step lives here: J is linear, hence
+        # J_tot = J(Da) + J(Db), broadcast to both spins. K is per-spin.
+        *_, nspin, N1, N2 = dm.shape
+        assert (nspin, N1) == (2, N2), f"UHF dm must have shape (..., 2, N, N), got {dm.shape}"
+        N = N2
+        vj_s, vk_s = self.with_df.get_jk(dm.reshape(-1, N, N), hermi, with_j, with_k)
+        vj = vk = None
+        if with_j:
+            j_tot = vj_s.reshape(-1, 2, N, N).sum(axis=1)
+            vj = np.stack([j_tot, j_tot], axis=1).reshape(dm.shape)
+        if with_k:
+            vk = vk_s.reshape(dm.shape)
         return vj, vk
 
 
 class THC_RHF(THCMixin, RHF):
     def __init__(self, mol: gto.Mole, eri_thc: ThcEri, auxbasis: str = None,
-                 min_exact_cycles=None, thc_threshold=None,
-                 verbose=0, dtype=np.float64,
-                 thc_only: bool = False, use_thc_only: bool = None):
+                 verbose: int = 0,
+                 with_j_thc: bool = True, with_k_thc: bool = True):
         RHF.__init__(self, mol)
-        self.init_thc(mol, eri_thc, auxbasis, min_exact_cycles, thc_threshold, verbose, dtype, thc_only, use_thc_only)
+        self.init_thc(mol, eri_thc, auxbasis, verbose=verbose,
+                      with_j_thc=with_j_thc, with_k_thc=with_k_thc)
 
     def _exact_vhf(self, mol, dm, hermi):
         vj, vk = self.df_obj.get_jk(dm, hermi=hermi)
@@ -216,35 +135,37 @@ class THC_RHF(THCMixin, RHF):
 
     def get_jk_thc(self, dm=None, hermi=1, with_j=True, with_k=True):
         if dm is None: dm = self.make_rdm1()
-        dm = np.asarray(dm)
+        # with_df handles arbitrary leading batch dims itself.
+        return self.with_df.get_jk(np.asarray(dm), hermi, with_j, with_k)
 
-        is_2d = (dm.ndim == 2)
-        if is_2d:
-            dms = dm[np.newaxis, ...]
-        else:
-            dms = dm
+class THC_GHF(THCMixin, GHF):
+    def __init__(self, mol: gto.Mole, eri_thc: ThcEri, auxbasis: str = None,
+                 verbose: int = 0,
+                 with_j_thc: bool = True, with_k_thc: bool = True):
+        GHF.__init__(self, mol)
+        self.init_thc(mol, eri_thc, auxbasis, verbose=verbose,
+                      with_j_thc=with_j_thc, with_k_thc=with_k_thc)
+        # Exact baseline must understand spin-orbital (2N, 2N) densities.
+        # (with_df keeps the plain DF baseline for spatial densities.)
+        self.df_obj = GHF(mol).density_fit(self.auxbasis)
 
-        vj = np.zeros_like(dms) if with_j else None
-        vk = np.zeros_like(dms) if with_k else None
-        X, Z = self.X, self.Z
+    def _exact_vhf(self, mol, dm, hermi):
+        vj, vk = self.df_obj.get_jk(mol, dm, hermi=hermi)
+        # GHF Fock in spin-orbitals, like UHF: no 0.5 (cf. RHF vj - vk*0.5).
+        return vj - vk
 
-        for i, p_mat in enumerate(dms):
-            p_mat = lib.to_backend(p_mat)
-            if with_j:
-                vji = self.contract_j_tree.contract([p_mat, X, X, Z, X, X])
-                if lib.has_cuda_gpu(): vji = vji.get()
-                vj[i] = vji
+    def get_jk_thc(self, dm=None, hermi=1, with_j=True, with_k=True):
+        if dm is None: dm = self.make_rdm1()
 
-            if with_k:
-                vki = self.contract_k_tree.contract([p_mat, X, X, Z, X, X])
-                if lib.has_cuda_gpu(): vki = vki.get()
-                vk[i] = vki
+        def get_jk_func(mol, dm, hermi, with_j, with_k, omega=None):
+            # NOTE: signature must match the 6-arg jkbuild convention used by
+            # ghf.get_jk (no vhfopt), like GHF.get_jk's inner jkbuild.
+            # with_df flattens the (nblocks, n_dm, N, N) spin-block stacks
+            # and handles complex densities itself.
+            return self.with_df.get_jk(dm, hermi, with_j, with_k)
 
-            if with_j: vj[i] = 0.5 * (vj[i] + vj[i].T)
-            if with_k: vk[i] = 0.5 * (vk[i] + vk[i].T)
+        return ghf.get_jk(self, dm, hermi, with_j, with_k, jkbuild=get_jk_func)
 
-        if is_2d:
-            if with_j: vj = vj[0]
-            if with_k: vk = vk[0]
+    def _combine_thc_vhf(self, ref_vhf, vj_thc, vk_thc):
+        return ref_vhf + vj_thc - vk_thc
 
-        return vj, vk

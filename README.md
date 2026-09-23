@@ -149,28 +149,39 @@ With this THC ERI interface, you can implement improved quantum chemistry algori
 2. Møller-Plesset Perturbation Theory of 2nd order
 3. Random Phase Approximation (RPA)
 
-The HF-SCF implementations inherit from PySCF's `RHF`/`UHF` classes. We build in `ao` mode so the THC does not need to be rebuilt between SCF iterations:
+The THC J/K engine is `THCDF` (`pythc.methods.thc_df`), which implements the `pyscf.df.DF` interface and can be dropped into any stock PySCF SCF via `with_df`. Spin-block splitting (UHF/GHF) and the RHF/UHF/GHF Fock factors then stay in PySCF. We build in `ao` mode so the THC does not need to be rebuilt between SCF iterations:
 
 ```python
+from pyscf import scf
 from pythc.grid import BeckeGrid
 from pythc.thc.ls_ri_becke import LS_RI_Becke
-from pythc.methods.hf import THC_RHF
+from pythc.methods.thc_df import THCDF
 
 auxbasis = 'cc-pvdz-ri'
 grid_builder = BeckeGrid(mol)
 thc_builder = LS_RI_Becke(mol=mol, grid=grid_builder, auxbasis=auxbasis)
 thc_eri = thc_builder.build(mode='ao')
 
-mf = THC_RHF(mol,
-             thc_eri,
-             auxbasis,
-             verbose=4,
-             thc_threshold=0.1,
-             min_exact_cycles=1)
+mf = scf.RHF(mol).density_fit(with_df=THCDF(mol, thc_eri, auxbasis=auxbasis))
 mf.kernel()
 ```
 
-The usage of THC during SCF can be configured using `thc_threshold` and `min_exact_cycles`. The `thc_threshold` parameter specifies the energy difference threshold (in Hartree) below which the solver switches from exact RI/DF cycles to THC, provided at least `min_exact_cycles` iterations have passed. If the parameter `thc_only=True` is provided, the SCF will be converged exclusively using the THC-ERI ([details](src/pythc/examples/scf_with_ls_snri_cholesky.py)).
+`density_fit` re-classes the SCF object so that `get_jk` routes through `with_df`; passing `with_df` directly avoids building a throwaway DF object.
+
+Each of J and K can independently be routed to THC or to conventional DF/RI via the `with_j_thc` / `with_k_thc` flags. In particular `with_j_thc=False` selects "only-K" mode (Coulomb through DF/RI, exchange through THC):
+
+```python
+mf.with_df = THCDF(mol, thc_eri, auxbasis=auxbasis, with_j_thc=False)
+```
+
+For an exact-DF baseline that switches to the THC density-difference ansatz after the first SCF cycle, use the `THC_RHF` / `THC_UHF` / `THC_GHF` wrappers from `pythc.methods.hf` (same constructor arguments plus the `with_j_thc` / `with_k_thc` flags):
+
+```python
+from pythc.methods.hf import THC_RHF
+
+mf = THC_RHF(mol, thc_eri, auxbasis, verbose=4)
+mf.kernel()
+```
 
 To calculate a Laplace-transformed MP2 energy contribution with 10 integration points, build the THC in `ov` mode:
 

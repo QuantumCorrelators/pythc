@@ -101,13 +101,12 @@ class THCSCF(Runnable):
     def __str__(self):
         return f"scf_thc_{self.thc.__str__()}"
 
-    def __init__(self, mol, thc, auxbasis='', thc_threshold=None, min_exact_cycles=None, thc_only: bool = False, use_thc_only: bool = None, chkfile=''):
+    def __init__(self, mol, thc, auxbasis='', with_j_thc: bool = True, with_k_thc: bool = True, chkfile=''):
         self.mol = mol
         self.thc = thc
         self.auxbasis = auxbasis
-        self.thc_threshold = thc_threshold
-        self.min_exact_cycles = min_exact_cycles
-        self.thc_only = bool(thc_only or (use_thc_only if use_thc_only is not None else False))
+        self.with_j_thc = with_j_thc
+        self.with_k_thc = with_k_thc
         self.chkfile = chkfile
 
     def kernel(self) -> tuple[float,...]:
@@ -119,17 +118,15 @@ class THCSCF(Runnable):
                          eri,
                          self.auxbasis,
                          verbose=4,
-                         thc_threshold=self.thc_threshold,
-                         min_exact_cycles=self.min_exact_cycles,
-                         thc_only=self.thc_only)
+                         with_j_thc=self.with_j_thc,
+                         with_k_thc=self.with_k_thc)
         else:
             mf = THC_RHF(self.mol,
                          eri,
                          self.auxbasis,
                          verbose=4,
-                         thc_threshold=self.thc_threshold,
-                         min_exact_cycles=self.min_exact_cycles,
-                         thc_only=self.thc_only)
+                         with_j_thc=self.with_j_thc,
+                         with_k_thc=self.with_k_thc)
 
         if self.chkfile:
             mf.chkfile = self.chkfile
@@ -286,11 +283,13 @@ class THCMP2_SOS_THCSCF(Runnable):
     def __str__(self):
         return f"{self.thc.__str__()}"
 
-    def __init__(self, mol, thc, auxbasis='', thc_only: bool = False, use_thc_only: bool = None):
+    def __init__(self, mol, thc, auxbasis='',
+                 with_j_thc: bool = True, with_k_thc: bool = True):
         self.mol = mol
         self.thc = thc
         self.auxbasis = auxbasis
-        self.thc_only = bool(thc_only or (use_thc_only if use_thc_only is not None else False))
+        self.with_j_thc = with_j_thc
+        self.with_k_thc = with_k_thc
 
     def kernel(self) -> tuple[float,...]:
         scfthc = LS_snRI_Cholesky(mol=self.mol, auxbasis=self.auxbasis, cholesky_threshold=1e-8, grid=grid.BeckeGrid(self.mol, level=1))
@@ -299,7 +298,8 @@ class THCMP2_SOS_THCSCF(Runnable):
         active: ExperimentRun = ExperimentRun.get_active()
 
         if self.mol.spin > 0:
-            mf = THC_UHF(self.mol, scf_eri, self.auxbasis, thc_only=self.thc_only)
+            mf = THC_UHF(self.mol, scf_eri, self.auxbasis,
+                         with_j_thc=self.with_j_thc, with_k_thc=self.with_k_thc)
             e_scf = mf.kernel()
             if not mf.converged:
                 raise RuntimeError(f"SCF failed to converge after {mf.max_cycle} cycles!")
@@ -311,7 +311,8 @@ class THCMP2_SOS_THCSCF(Runnable):
             e_corr = ump2_energy_laplace(self.mol, mf, eri)
 
         else:
-            mf = THC_RHF(self.mol, scf_eri, self.auxbasis, thc_only=self.thc_only)
+            mf = THC_RHF(self.mol, scf_eri, self.auxbasis,
+                         with_j_thc=self.with_j_thc, with_k_thc=self.with_k_thc)
             e_scf = mf.kernel()
             if not mf.converged:
                 raise RuntimeError(f"SCF failed to converge after {mf.max_cycle} cycles!")
@@ -336,11 +337,13 @@ class THCMP2_THCSCF(Runnable):
     def __str__(self):
         return f"{self.thc.__str__()}"
 
-    def __init__(self, mol, thc, auxbasis='', thc_only: bool = False, use_thc_only: bool = None):
+    def __init__(self, mol, thc, auxbasis='',
+                 with_j_thc: bool = True, with_k_thc: bool = True):
         self.mol = mol
         self.thc = thc
         self.auxbasis = auxbasis
-        self.thc_only = bool(thc_only or (use_thc_only if use_thc_only is not None else False))
+        self.with_j_thc = with_j_thc
+        self.with_k_thc = with_k_thc
 
     def kernel(self) -> tuple[float,...]:
         scfthc = LS_RI_Cholesky(mol=self.mol, auxbasis=self.auxbasis, cholesky_threshold=1e-8, grid=grid.BeckeGrid(self.mol))
@@ -349,7 +352,8 @@ class THCMP2_THCSCF(Runnable):
         active: ExperimentRun = ExperimentRun.get_active()
 
         if self.mol.spin > 0:
-            mf = THC_UHF(self.mol, scf_eri, self.auxbasis, thc_only=self.thc_only)
+            mf = THC_UHF(self.mol, scf_eri, self.auxbasis,
+                         with_j_thc=self.with_j_thc, with_k_thc=self.with_k_thc)
             e_scf = mf.kernel()
             if not mf.converged:
                 raise RuntimeError(f"SCF failed to converge after {mf.max_cycle} cycles!")
@@ -361,7 +365,8 @@ class THCMP2_THCSCF(Runnable):
             e_corr = ump2_energy_laplace(self.mol, mf, eri)
 
         else:
-            mf = THC_RHF(self.mol, scf_eri, self.auxbasis, thc_only=self.thc_only)
+            mf = THC_RHF(self.mol, scf_eri, self.auxbasis,
+                         with_j_thc=self.with_j_thc, with_k_thc=self.with_k_thc)
             e_scf = mf.kernel()
             if not mf.converged:
                 raise RuntimeError(f"SCF failed to converge after {mf.max_cycle} cycles!")

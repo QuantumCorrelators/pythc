@@ -30,7 +30,7 @@ def main():
     thc = LS_Aux_Becke(mol=mol, fit_auxbasis='cc-pvdz')
     eri = thc.build(mode='ao')
 
-    mf = THC_RHF(mol, eri, auxbasis, thc_threshold=0.1, min_exact_cycles=1)
+    mf = THC_RHF(mol, eri, auxbasis)
     scf_e = mf.kernel()
 
     print(f'SCF E: {scf_e}')

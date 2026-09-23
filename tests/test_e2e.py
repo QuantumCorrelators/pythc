@@ -241,8 +241,6 @@ class TestEriApprox(unittest.TestCase):
                     'auxbasis': build_auxbasis(mol, auxbasis),
                     'mol': mol,
                     'grid': BeckeGrid(mol=mol, level=0),
-                    'thc_threshold': 0.1,
-                    'min_exact_cycles': 1,
                 }
 
                 runner_pyscf = DFSCF.from_config(params)
@@ -314,7 +312,6 @@ class TestEriApprox(unittest.TestCase):
                         'auxbasis': auxbasis,
                         'mol': mol,
                         'grid': BeckeGrid(mol),
-                        'thc_only': True,
                         'chkfile': ''
                     }
                     params.update(thc_kwargs)
