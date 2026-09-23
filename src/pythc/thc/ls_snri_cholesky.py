@@ -30,7 +30,8 @@ class LS_snRI_Cholesky(THC):
                  auxbasis: str = None,
                  cholesky_decomp=AccelRPCholesky,
                  cholesky_threshold: float = 1e-5,
-                 epsilon: float = 1e-11):
+                 epsilon: float = 1e-11,
+                 seed: int | None = None):
 
         super().__init__()
 
@@ -38,11 +39,13 @@ class LS_snRI_Cholesky(THC):
         self.N = mol.nao_nr()
         self.auxbasis = auxbasis if auxbasis is not None else f'{mol.basis}-ri'
         self.cholesky_decomp = cholesky_decomp()
+        if seed is not None:
+            # Honored by AccelRPCholesky (default); reproducible grid pruning.
+            self.cholesky_decomp.seed = seed
         self.cholesky_threshold = cholesky_threshold
         self.grid = grid if grid is not None else BeckeGrid(mol, level=0)
         self.mo_coeff = mo_coeff if mo_coeff is not None and len(mo_coeff) > 0 else np.eye(mol.nao_nr())
         self.epsilon = epsilon
-
 
     @classmethod
     def __str__(cls):

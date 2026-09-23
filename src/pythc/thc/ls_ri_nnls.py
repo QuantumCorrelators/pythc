@@ -30,7 +30,7 @@ class LS_RI_NNLS(LS_RI_THC):
         else:
             raise NotImplementedError
             
-        decomp = AccelRPCholesky()
+        decomp = AccelRPCholesky(seed=getattr(self, 'seed', None))
         n_grid = X_tmp.shape[0]
         # Defaulting to 1e-5 threshold similar to the Cholesky THC implementation
         cholesky_threshold = getattr(self, 'cholesky_threshold', 1e-5)

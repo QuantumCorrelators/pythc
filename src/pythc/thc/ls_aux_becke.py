@@ -37,11 +37,15 @@ class LS_Aux_Becke(THC):
                  auxbasis: str = None,
                  regularization: float = 1e-6,
                  level=0,
+                 seed: int | None = None,
                  ):
         self.N = mol.nao_nr()
         self.mol = mol
         self.grid = grid if grid else BeckeGrid(mol, level=level)
         self.cholesky_decomp = cholesky_decomp()
+        if seed is not None:
+            # Honored by AccelRPCholesky (default); reproducible grid pruning.
+            self.cholesky_decomp.seed = seed
         self.cholesky_threshold = cholesky_threshold
         self.regularization = regularization
 

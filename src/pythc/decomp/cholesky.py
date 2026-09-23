@@ -1,5 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
+from unittest import mock
 
 import numpy as np
 from pythc.decomp.acccholesky.lra import PSDLowRank
@@ -48,7 +50,8 @@ class SymMetricOV(FunctionMatrix):
             self._diag_values = diag_A * diag_B
 
         if vec is None:
-            return self._diag_values
+            # Copy: callers (acccholesky) update the returned array in place.
+            return self._diag_values.copy()
 
         return self._diag_values[vec]
 
@@ -83,7 +86,8 @@ class GramMetric(FunctionMatrix):
             self._diag_values = np.einsum('ij,ij->i', self.X, self.X)
 
         if vec is None:
-            return self._diag_values
+            # Copy: callers (acccholesky) update the returned array in place.
+            return self._diag_values.copy()
 
         return self._diag_values[vec]
 
@@ -122,14 +126,50 @@ class SymMetric(FunctionMatrix):
             self._diag_values = diag ** 2
 
         if vec is None:
-            return self._diag_values
+            # Copy: callers (acccholesky) update the returned array in place.
+            return self._diag_values.copy()
 
         return self._diag_values[vec]
 
 
 class AccelRPCholesky(Cholesky):
+    """Accelerated randomly-pivoted Cholesky with optional seeding.
+
+    Upstream ``acccholesky`` draws from two unseeded sources: a hardcoded
+    ``np.random.default_rng()`` (proposal batches, ignores
+    ``np.random.seed``) and the legacy ``np.random.rand()`` (rejection
+    step). Both are fixed for the duration of the call when ``seed`` is
+    set; the legacy global state is restored afterwards. ``seed=None``
+    (default) keeps the unseeded behavior.
+
+    Note: a seed alone does not give reproducibility, because the
+    library's ``b='auto'`` block size adapts to wall-clock timing. Hence a
+    fixed block size is used whenever ``seed`` is set (overridable via
+    ``block_size``); ``block_size=None`` with ``seed=None`` keeps the
+    auto-tuned behavior.
+    """
+
+    def __init__(self, seed: int | None = None, block_size: int | None = None):
+        self.seed = seed
+        self.block_size = block_size
+
     def __str__(self):
         return "accelerated_rpcholesky"
+
+    @staticmethod
+    @contextmanager
+    def _seeded_rng(seed: int | None):
+        if seed is None:
+            yield
+            return
+        legacy_state = np.random.get_state()
+        try:
+            np.random.seed(seed)
+            with mock.patch.object(np.random, 'default_rng',
+                                   return_value=np.random.default_rng(seed)):
+                yield
+        finally:
+            np.random.set_state(legacy_state)
 
     def decompose(self, A: FunctionMatrix, rank: int, err_tol: float = -1.0) -> tuple[np.ndarray, np.ndarray, int]:
         max_mem_bytes = lib.pyscf_max_memory() * (1024**2)
@@ -143,7 +183,14 @@ class AccelRPCholesky(Cholesky):
         bytes_per_rank = 16 * n
         max_rank = max(1, int(avail_mem_bytes / bytes_per_rank)) if bytes_per_rank > 0 else rank
 
-        low_rank: PSDLowRank = rpcholesky(A, min(rank, max_rank), stoptol=err_tol, verbose=False)
+        with self._seeded_rng(self.seed):
+            k = min(rank, max_rank)
+            b = self.block_size
+            if b is None and self.seed is not None:
+                # Deterministic default mirroring the library's initial auto
+                # value; 'auto' itself is timing-adaptive and not reproducible.
+                b = max(10, -(-k // 10))
+            low_rank: PSDLowRank = rpcholesky(A, k, b, stoptol=err_tol, verbose=False)
         piv = low_rank.get_indices()
         L = low_rank.get_right_factor()
 

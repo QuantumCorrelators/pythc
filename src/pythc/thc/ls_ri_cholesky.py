@@ -36,13 +36,17 @@ class LS_RI_Cholesky(THC):
                  auxbasis: str = None,
                  cholesky_decomp: Type[Cholesky] = AccelRPCholesky,
                  cholesky_threshold: float = 1e-5,
-                 symmetry: str = 's2'):
+                 symmetry: str = 's2',
+                 seed: int | None = None):
 
         super().__init__()
         self.mol = mol
         self.N = mol.nao_nr()
         self.auxbasis = auxbasis if auxbasis is not None else f'{self.mol.basis}-ri'
         self.cholesky_decomp = cholesky_decomp()
+        if seed is not None:
+            # Honored by AccelRPCholesky (default); reproducible grid pruning.
+            self.cholesky_decomp.seed = seed
         self.cholesky_threshold = cholesky_threshold
         self.grid = grid if grid is not None else BeckeGrid(mol)
         self.mol = mol
