@@ -138,9 +138,9 @@ class THC(ABC, Configurable):
         self.mo_coeff = mo_coeff
 
     @abstractmethod
-    def build(self) -> ThcEri:
+    def build(self, mode: Mode) -> ThcEri:
         pass
 
     @abstractmethod
-    def build_unrestricted(self) -> ThcEriUnrestricted:
+    def build_unrestricted(self, mode: Mode) -> ThcEriUnrestricted:
         pass

@@ -34,7 +34,7 @@ import numpy as np
 from pyscf import df, gto
 
 import pythc.lib as lib
-from pythc.thc.thc_base import ThcEri
+from pythc.thc.thc_base import ThcEri, THC
 
 logger = logging.getLogger()
 
@@ -177,7 +177,7 @@ class THCDF(df.DF):
     cycle count, energy and DIIS state are visible.
     """
 
-    def __init__(self, mol: gto.Mole, eri_thc: ThcEri, auxbasis: str = None,
+    def __init__(self, mol: gto.Mole, thc: THC, auxbasis: str = None,
                  baseline: df.DF = None,
                  with_j_thc: bool = True, with_k_thc: bool = True):
         df.DF.__init__(self, mol, auxbasis)
@@ -187,18 +187,19 @@ class THCDF(df.DF):
                 baseline.auxbasis = auxbasis
         self._baseline = baseline
 
-        eri_thc.to_backend()
-        X, Z = eri_thc.get_X_Z()
-        # Exploit Z symmetry once: all downstream uses assume Z == Z.T.
-        Z = 0.5 * (Z + Z.T)
-        self.X, self.Z = X, Z
-
+        self.thc = thc
+        self.X, self.Z = None, None
         self.with_j_thc = with_j_thc
         self.with_k_thc = with_k_thc
 
     def build(self):
-        # X/Z are already on the backend; the baseline builds lazily on
-        # first use, so there is nothing to do here.
+        eri_thc = self.thc.build(mode="ao")
+        eri_thc.to_backend()
+
+        X, Z = eri_thc.get_X_Z()
+        Z = 0.5 * (Z + Z.T)
+        self.X, self.Z = X, Z
+
         return self
 
     def reset(self, mol=None):
@@ -220,6 +221,9 @@ class THCDF(df.DF):
         densities. Returns vj/vk in the input's leading shape (None for a
         disabled term).
         """
+        if self.Z is None:
+            self.build()
+
         if omega is not None and omega != 0:
             # No range separation in THC; exact DF handles it.
             vj, vk = self._baseline.get_jk(dm, hermi, with_j, with_k,

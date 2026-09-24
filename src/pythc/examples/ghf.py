@@ -16,10 +16,10 @@ mol.build()
 
 auxbasis = 'cc-pvdz-ri'
 
-mf = scf.GHF(mol=mol)
-mf.density_fit()
+mf = scf.GHF(mol=mol).density_fit(auxbasis=auxbasis)
 mf.verbose = 4
 e_ghf = mf.kernel()
+dm_exact = mf.make_rdm1()
 
 thc = LS_snRI_Cholesky(mol, cholesky_threshold=1e-9)
 eri = thc.build()
@@ -29,6 +29,24 @@ eri = thc.build()
 thc_mf = scf.GHF(mol).density_fit(with_df=THCDF(mol, eri, auxbasis=auxbasis))
 thc_mf.verbose = 4
 e_ghf_thc = thc_mf.kernel()
+dm_thc = thc_mf.make_rdm1()
 
 
-print(f"E GHF: {e_ghf}; THC: {e_ghf_thc}; ERROR: {e_ghf_thc - e_ghf}")
+print(f"E GHF: {e_ghf} <S^2>={mf.spin_square()[0]:.4f}; "
+      f"THC: {e_ghf_thc} <S^2>={thc_mf.spin_square()[0]:.4f}; "
+      f"ERROR: {e_ghf_thc - e_ghf}")
+
+# Cross-restart: converge each theory starting from the other's density.
+# If both keep their energies, the minima coexist in both theories and any
+# gap is basin selection (note <S^2>), not an integral error. If one side
+# collapses to the other's minimum, that minimum is likely spurious.
+mf_cross = scf.GHF(mol=mol).density_fit(auxbasis=auxbasis)
+mf_cross.verbose = 0
+e_xrt = mf_cross.kernel(dm0=dm_thc)
+
+thc_mf_cross = scf.GHF(mol).density_fit(with_df=THCDF(mol, eri, auxbasis=auxbasis))
+thc_mf_cross.verbose = 0
+e_trt = thc_mf_cross.kernel(dm0=dm_exact)
+
+print(f"exact-from-THC-dm: {e_xrt} <S^2>={mf_cross.spin_square()[0]:.4f}")
+print(f"thc-from-exact-dm: {e_trt} <S^2>={thc_mf_cross.spin_square()[0]:.4f}")
