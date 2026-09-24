@@ -11,7 +11,7 @@ from pythc.grid import GridProvider
 from pythc.thc.ls_ri_thc import LS_RI_THC
 from pythc.thc.ls_thc_funcs import eval_basefuncs
 from pythc.thc.thc_base import Mode
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc import observe
 
 logger = logging.getLogger()
 
@@ -70,7 +70,6 @@ class LS_RI_KMeans(LS_RI_THC):
             np.ndarray: The pruned collocation matrix containing only the selected
                         interpolation points.
         """
-        active: ExperimentRun = ExperimentRun.get_active()
         n_aux = auxmol.nao_nr()
 
         g = gen_grid.Grids(self.mol)
@@ -88,7 +87,7 @@ class LS_RI_KMeans(LS_RI_THC):
         for ia, atom_coords in enumerate(coords):
             total_grid_size += len(atom_coords)
 
-        if active: active.log_metric("grid_points", total_grid_size)
+        observe.log_metric("grid_points", total_grid_size)
         requested_grid_size = (n_aux*self.ips_per_naux)
         if requested_grid_size>total_grid_size:
             logger.warning('Attempting to build a bigger grid than the parent. Falling back to full parent grid size')

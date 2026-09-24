@@ -9,7 +9,7 @@ from pythc.thc.checkpoints import GRID_PRUNING, FITTING_MATRIX
 from pythc.thc.ls_thc_funcs import build_auxmol, build_coulomb_matrix, \
     build_coulomb_matrix_asym, eval_basefuncs
 from pythc.thc.thc_base import THC, ThcEri, Mode, ERI, ThcEriUnrestricted
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc import observe
 
 logger = logging.getLogger()
 
@@ -82,7 +82,6 @@ class LS_RI_THC(THC):
         Raises:
             NotImplementedError: If the fitting mode is not 'ao' or 'ov'.
         """
-        active = ExperimentRun.get_active()
 
         auxmol = build_auxmol(self.mol, self.auxbasis)
 
@@ -90,11 +89,11 @@ class LS_RI_THC(THC):
         if mode == 'ov':
             X = X @ self.mo_coeff
 
-        if active: active.checkpoint(GRID_PRUNING)
+        observe.checkpoint(GRID_PRUNING)
 
         D = build_coulomb_matrix(mode, self.mol, auxmol, X, self.mo_coeff)
         Z = D.T @ D
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
 
         return ThcEri(self.mol.nelectron, X, Z, D.T)
 
@@ -128,7 +127,6 @@ class LS_RI_THC(THC):
         Raises:
             NotImplementedError: If the fitting mode is set to 'ao'.
         """
-        active = ExperimentRun.get_active()
 
         if mode == 'ao':
             raise NotImplementedError("fitting an unrestricted THC in AO mode is currently not supported")
@@ -159,9 +157,9 @@ class LS_RI_THC(THC):
         X_alpha = X_alpha @ mo_coeff_alpha
         X_beta = X_beta @ mo_coeff_beta
 
-        if active: active.checkpoint(GRID_PRUNING)
+        observe.checkpoint(GRID_PRUNING)
 
         Z_aa, Z_bb, Z_ab = build_coulomb_matrix_asym(mode, self.mol, auxmol, X_alpha, X_beta, self.mo_coeff)
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
 
         return ThcEriUnrestricted(self.mol.nelectron, X_alpha, X_beta, Z_aa, Z_bb, Z_ab)

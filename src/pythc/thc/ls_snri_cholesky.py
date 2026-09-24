@@ -9,7 +9,7 @@ from pythc.grid import BeckeGrid
 from pythc.thc.checkpoints import GRID_BUILD, BASIS_FUNCTION_EVAL, GRID_PRUNING, FITTING_MATRIX, METRIC_INVERSION
 from pythc.thc.ls_thc_funcs import build_auxmol, build_aux_coulomb_inv, eval_basefuncs
 from pythc.thc.thc_base import ThcEri, Mode, ThcEriUnrestricted, THC
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc import observe
 
 logger = logging.getLogger(__name__)
 
@@ -52,12 +52,11 @@ class LS_snRI_Cholesky(THC):
         return "btd_thc"
 
     def build(self, mode: Mode = "ao") -> ThcEri:
-        active = ExperimentRun.get_active()
 
         grid_dense, weights_dense = BeckeGrid(self.mol, level=1).build()
         grid_prune, weights_prune = self.grid.build()
         logger.info(f"built dense grid of size: {len(grid_dense)}, pruned grid of size: {len(grid_prune)}")
-        if active: active.checkpoint(GRID_BUILD)
+        observe.checkpoint(GRID_BUILD)
 
         R_dense = eval_basefuncs(self.mol, grid_dense)
         X_dense = (np.sqrt(np.sqrt(weights_dense))[:, np.newaxis] * R_dense)
@@ -69,7 +68,7 @@ class LS_snRI_Cholesky(THC):
         if mode != 'ao':
             X_dense = X_dense @ self.mo_coeff
             X_prune = X_prune @ self.mo_coeff
-        if active: active.checkpoint(BASIS_FUNCTION_EVAL)
+        observe.checkpoint(BASIS_FUNCTION_EVAL)
         logger.info(f"using cholesky threshold: {self.cholesky_threshold}")
 
         n_occ = self.mol.nelectron // 2 if self.mol.nelectron > 1 else 1
@@ -87,7 +86,7 @@ class LS_snRI_Cholesky(THC):
             X_v_dense = X_dense[:, n_occ:]
             S_Lg = (X_o_pruned @ X_o_dense.T) * (X_v_pruned @ X_v_dense.T)
 
-        if active: active.checkpoint(GRID_PRUNING)
+        observe.checkpoint(GRID_PRUNING)
         logger.info("building BTD fitting matrices")
 
         auxmol = build_auxmol(self.mol, self.auxbasis)
@@ -104,10 +103,10 @@ class LS_snRI_Cholesky(THC):
 
         # 3. Compute A_LM
         A_LM = S_Lg @ B_gM  # Shape: (num_rank, n_aux)
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
 
         D = self.build_coulomb_matrix_sep(L, A_LM.T)
-        if active: active.checkpoint(METRIC_INVERSION)
+        observe.checkpoint(METRIC_INVERSION)
 
         logger.info("building coulomb kernel matrix")
         Z = D @ D.T
@@ -122,13 +121,12 @@ class LS_snRI_Cholesky(THC):
         nocc_alpha = (self.mol.nelectron + S) // 2
         nocc_beta = (self.mol.nelectron - S) // 2
 
-        active = ExperimentRun.get_active()
         mo_coeff_alpha = self.mo_coeff[0]
         mo_coeff_beta = self.mo_coeff[1]
 
         grid_dense, weights_dense = BeckeGrid(self.mol, level=1).build()
         grid_prune, weights_prune = self.grid.build()
-        if active: active.checkpoint(GRID_BUILD)
+        observe.checkpoint(GRID_BUILD)
 
         logger.info("evaluating basis functions on grid")
         R_dense = eval_basefuncs(self.mol, coords=grid_dense)
@@ -143,7 +141,7 @@ class LS_snRI_Cholesky(THC):
 
         X_alpha_prune = X_prune @ mo_coeff_alpha
         X_beta_prune = X_prune @ mo_coeff_beta
-        if active: active.checkpoint(BASIS_FUNCTION_EVAL)
+        observe.checkpoint(BASIS_FUNCTION_EVAL)
 
         auxmol = build_auxmol(self.mol, self.auxbasis)
         j2c_inv = build_aux_coulomb_inv(auxmol)
@@ -184,7 +182,7 @@ class LS_snRI_Cholesky(THC):
             Z_bb = self.build_coulomb_matrix_sym(L_bb, Y_beta.T)
 
         Z_ab = self.build_coulomb_matrix_asym(L_aa, Y_alpha.T, L_bb, Y_beta.T)
-        if active: active.checkpoint(METRIC_INVERSION)
+        observe.checkpoint(METRIC_INVERSION)
 
         return ThcEriUnrestricted(self.mol.nelectron, X_alpha_pruned, X_beta_pruned, Z_aa, Z_bb, Z_ab)
 

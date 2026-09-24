@@ -14,7 +14,7 @@ from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
 from pythc.thc.ls_snri_cholesky import LS_snRI_Cholesky
 from pythc.thc.thc_base import ERI, ThcEri, THC
 from pythc.thc.thc_base import ThcEriUnrestricted
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc import observe
 
 if lib.has_cuda_gpu():
     import cupy as xp
@@ -550,8 +550,6 @@ def ump2_energy_laplace(mol: gto.Mole, mf: SCF, thc: ThcEriUnrestricted, n_lapla
 
 def mp2_energy_laplace(mol: gto.Mole, mf: SCF, thc: ThcEri, n_laplace: int = 10, jc = 2.0, kc = 1.0, J_calc=_calculate_mp2_J_optimized,
                        K_calc=_calculate_mp2_K_optimized) -> tuple[float,...]:
-    active: ExperimentRun = ExperimentRun.get_active()
-
     thc.to_backend() # copy to GPU is needed
 
     nocc = mol.nelectron // 2
@@ -568,31 +566,23 @@ def mp2_energy_laplace(mol: gto.Mole, mf: SCF, thc: ThcEri, n_laplace: int = 10,
     X, Z = thc.get_X_Z()
     X_o = X[:, :nocc]
     X_v = X[:, nocc:]
-    if active: active.checkpoint("mp2_laplace_setup")
+    observe.checkpoint("mp2_laplace_setup")
 
     mp2_J, mp2_K = 0.0, 0.0
 
     if jc != 0:
         logger.info("calculating J")
         mp2_J = J_calc(tau_o, tau_v, X_o, X_v, Z)
-        if active: active.checkpoint("mp2_laplace_J_build")
+        observe.checkpoint("mp2_laplace_J_build")
         gc.collect()
 
     if kc != 0:
         logger.info("calculating K")
         mp2_K = K_calc(tau_o, tau_v, X_o, X_v, Z)
-        if active: active.checkpoint("mp2_laplace_K_build")
+        observe.checkpoint("mp2_laplace_K_build")
 
-    if active:
-        if "mp2_e_thc_J" in active.metrics:
-             active.metrics["mp2_e_thc_J"].append(float(mp2_J))
-        else:
-            active.metrics["mp2_e_thc_J"] = [float(mp2_J)]
-
-        if "mp2_e_thc_K" in active.metrics:
-            active.metrics["mp2_e_thc_K"].append(float(mp2_K))
-        else:
-            active.metrics["mp2_e_thc_K"] = [float(mp2_K)]
+    observe.append_metric("mp2_e_thc_J", float(mp2_J))
+    observe.append_metric("mp2_e_thc_K", float(mp2_K))
 
     return (-jc * mp2_J) + (kc * mp2_K), mp2_J, mp2_K
 

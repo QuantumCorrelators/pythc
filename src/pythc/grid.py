@@ -6,7 +6,7 @@ from pyscf import gto, dft
 from pyscf.dft import treutler_prune
 
 from pythc.configurable import Configurable
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc import observe
 
 
 class GridProvider(ABC,Configurable):
@@ -32,8 +32,6 @@ class BeckeGrid(GridProvider):
         grid.prune = self.prune
         grid.build()
 
-        active: ExperimentRun = ExperimentRun.get_active()
-        if active:
-            active.log_metric("grid_points", len(grid.coords))
+        observe.log_metric("grid_points", len(grid.coords))
 
         return grid.coords, grid.weights

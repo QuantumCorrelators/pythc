@@ -7,9 +7,9 @@ import numpy as np
 
 import pythc.lib as lib
 from pythc.configurable import Configurable
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc import observe
 
-type Mode = Literal['ao', 'ov', 'oo', 'vv', 'ia']
+type Mode = Literal['ao', 'ov', 'oo', 'vv', 'pr']
 
 
 class ERI(ABC):
@@ -45,9 +45,7 @@ class ThcEri(ERI):
         self.Z = Z  # (M, M)
         self.D = D # (M, n_aux)
 
-        active = ExperimentRun.get_active()
-        if active:
-            active.log_metric("n_thc", X.shape[0])
+        observe.log_metric("n_thc", X.shape[0])
 
 
     @classmethod
@@ -119,11 +117,9 @@ class ThcEriUnrestricted(ERI):
         self.Z_bb = Z_bb
         self.Z_ab = Z_ab
 
-        active = ExperimentRun.get_active()
-        if active:
-            X_a_len = X_alpha.shape[0]
-            X_b_len = X_beta.shape[0]
-            active.log_metric("n_thc", max(X_a_len, X_b_len))
+        X_a_len = X_alpha.shape[0]
+        X_b_len = X_beta.shape[0]
+        observe.log_metric("n_thc", max(X_a_len, X_b_len))
 
     def to_backend(self):
         self.X_alpha = lib.to_backend(self.X_alpha)

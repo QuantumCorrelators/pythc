@@ -13,7 +13,7 @@ from pythc.thc.checkpoints import GRID_BUILD, BASIS_FUNCTION_EVAL, GRID_PRUNING,
 from pythc.thc.ls_thc_funcs import build_auxmol, build_aux_coulomb_inv, eval_basefuncs, contract_codensity_df_eri
 from pythc.thc.thc_base import ThcEri, Mode, THC
 from pythc.thc.thc_base import ThcEriUnrestricted
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc import observe
 
 logger = logging.getLogger()
 
@@ -77,10 +77,9 @@ class LS_RI_Cholesky(THC):
         Raises:
             NotImplementedError: If the fitting mode is not 'ao' or 'ov'.
         """
-        active = ExperimentRun.get_active()
 
         grid, weigths = self.grid.build()
-        if active: active.checkpoint(GRID_BUILD)
+        observe.checkpoint(GRID_BUILD)
 
         logger.info(f"built grid of size: {len(grid)}")
 
@@ -91,7 +90,7 @@ class LS_RI_Cholesky(THC):
         if mode != 'ao':
             X = X @ self.mo_coeff
 
-        if active: active.checkpoint(BASIS_FUNCTION_EVAL)
+        observe.checkpoint(BASIS_FUNCTION_EVAL)
         logger.info(f"using cholesky threshold: {self.cholesky_threshold}")
 
         n_occ = self.mol.nelectron // 2
@@ -112,7 +111,7 @@ class LS_RI_Cholesky(THC):
 
         X_pruned = X[piv, :]
 
-        if active: active.checkpoint(GRID_PRUNING)
+        observe.checkpoint(GRID_PRUNING)
         logger.info(f"building fitting matrix")
 
         auxmol = build_auxmol(self.mol, self.auxbasis)
@@ -120,10 +119,10 @@ class LS_RI_Cholesky(THC):
         logger.info("building coulomb kernel matrix")
 
         Y = contract_codensity_df_eri(mode, X_pruned, self.mo_coeff, self.mol, auxmol, j2c_inv, n_occ, n_virt)
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
 
         D = self.build_coulomb_matrix_sep(L, Y)
-        if active: active.checkpoint(METRIC_INVERSION)
+        observe.checkpoint(METRIC_INVERSION)
 
         Z = D @ D.T
 
@@ -161,12 +160,11 @@ class LS_RI_Cholesky(THC):
         nvir_alpha = N - nocc_alpha
         nvir_beta = N - nocc_beta
 
-        active = ExperimentRun.get_active()
         mo_coeff_alpha = self.mo_coeff[0]
         mo_coeff_beta = self.mo_coeff[1]
 
         grid, weights = self.grid.build()
-        if active: active.checkpoint(GRID_BUILD)
+        observe.checkpoint(GRID_BUILD)
 
         logger.info("evaluating basis functions on grid")
         R = eval_basefuncs(self.mol, coords=grid)
@@ -176,7 +174,7 @@ class LS_RI_Cholesky(THC):
 
         X_alpha = X @ mo_coeff_alpha
         X_beta = X @ mo_coeff_beta
-        if active: active.checkpoint(BASIS_FUNCTION_EVAL)
+        observe.checkpoint(BASIS_FUNCTION_EVAL)
 
         n_grid = X.shape[0]
 
@@ -184,7 +182,7 @@ class LS_RI_Cholesky(THC):
         L_aa, X_alpha_pruned_aa = self.prune_grid(X_alpha, n_grid, nocc_alpha)
         L_bb, X_beta_pruned_bb = self.prune_grid(X_beta, n_grid, nocc_beta)
 
-        if active: active.checkpoint(GRID_PRUNING)
+        observe.checkpoint(GRID_PRUNING)
         logger.info(f"building fitting matrices")
 
         auxmol = build_auxmol(self.mol, self.auxbasis)
@@ -194,7 +192,7 @@ class LS_RI_Cholesky(THC):
 
         Y_alpha = contract_codensity_df_eri(mode, X_alpha_pruned_aa, mo_coeff_alpha, self.mol, auxmol, j2c_inv, nocc_alpha, nvir_alpha)
         Y_beta = contract_codensity_df_eri(mode, X_beta_pruned_bb, mo_coeff_beta, self.mol, auxmol, j2c_inv, nocc_beta, nvir_beta)
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
 
         Z_aa = Z_bb = np.zeros((n_grid, n_grid))
         if L_aa.shape[0] > 0:
@@ -204,7 +202,7 @@ class LS_RI_Cholesky(THC):
             Z_bb = self.build_coulomb_matrix_sym(L_bb, Y_beta)
 
         Z_ab = self.build_coulomb_matrix_asym(L_aa, Y_alpha, L_bb, Y_beta)
-        if active: active.checkpoint(METRIC_INVERSION)
+        observe.checkpoint(METRIC_INVERSION)
 
         return ThcEriUnrestricted(self.mol.nelectron, X_alpha_pruned_aa, X_beta_pruned_bb, Z_aa, Z_bb, Z_ab)
 

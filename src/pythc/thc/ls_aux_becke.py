@@ -12,7 +12,7 @@ from pythc.thc.checkpoints import GRID_BUILD, BASIS_FUNCTION_EVAL, GRID_PRUNING,
 from pythc.thc.ls_thc_funcs import eval_basefuncs
 from pythc.thc.thc_base import THC, ThcEri, ERI, Mode
 from pythc.thc.thc_base import ThcEriUnrestricted
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc import observe
 
 logger = logging.getLogger()
 
@@ -100,9 +100,8 @@ class LS_Aux_Becke(THC):
             ThcEri: Dataclass containing the number of electrons, collocation matrix (X),
                     and the Coulomb kernel (Z).
         """
-        active: ExperimentRun = ExperimentRun.get_active()
         auxmol = self.build_auxmol()
-        if active: active.log_metric("fit_auxbasis_size", auxmol.nao_nr())
+        observe.log_metric("fit_auxbasis_size", auxmol.nao_nr())
 
 
         logger.info("evaluating basis functions on grid")
@@ -110,7 +109,7 @@ class LS_Aux_Becke(THC):
 
         D = self.build_D(Xaux_pruned, auxmol)
         Z = D.T @ D
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
 
         logger.info(f"built THC with Z: {Z.shape}, X: {X_pruned.shape}")
         # Store D transposed so its rows match the grid points (M, N), the
@@ -141,26 +140,24 @@ class LS_Aux_Becke(THC):
         if mode != 'ov':
             raise NotImplementedError("fitting an unrestricted THC in AO mode is currently not supported")
 
-        active = ExperimentRun.get_active()
         auxmol = self.build_auxmol()
-        if active: active.log_metric("fit_auxbasis_size", auxmol.nao_nr())
+        observe.log_metric("fit_auxbasis_size", auxmol.nao_nr())
 
         logger.info("evaluating basis functions on grid")
         Xaux_pruned, X_pruned_alpha, X_pruned_beta = self.get_pruned_grid(mode, auxmol)
 
         Y = self.build_D(Xaux_pruned, auxmol)
         Z = Y.T @ Y
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
 
 
         return ThcEriUnrestricted(self.mol.nelectron, X_pruned_alpha, X_pruned_beta, Z, Z, Z)
 
     prune = False
     def get_pruned_grid(self, mode, auxmol):
-        active = ExperimentRun.get_active()
 
         coords, weights = self.grid.build()
-        if active: active.checkpoint(GRID_BUILD)
+        observe.checkpoint(GRID_BUILD)
 
         logger.info("evaluating basis functions on grid")
         Raux = eval_basefuncs(auxmol, coords)
@@ -168,7 +165,7 @@ class LS_Aux_Becke(THC):
 
         R = eval_basefuncs(self.mol, coords)
         X = (np.sqrt(np.sqrt(weights))[:, np.newaxis] * R)
-        if active: active.checkpoint(BASIS_FUNCTION_EVAL)
+        observe.checkpoint(BASIS_FUNCTION_EVAL)
 
         if self.prune:
             logger.info("pruning active: reducing grid size")
@@ -181,7 +178,7 @@ class LS_Aux_Becke(THC):
             X_pruned = X[piv, :]
 
             logger.info(f"selected {len(X_pruned)} pruned points from {len(coords)} parent")
-            if active: active.checkpoint(GRID_PRUNING)
+            observe.checkpoint(GRID_PRUNING)
         else:
             X_aux_pruned = Xaux
             X_pruned = X

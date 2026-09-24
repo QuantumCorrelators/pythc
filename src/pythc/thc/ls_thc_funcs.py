@@ -9,7 +9,7 @@ from pyscf import df, gto, ao2mo
 from pythc import lib
 from pythc.thc.checkpoints import METRIC_INVERSION
 from pythc.thc.thc_base import Mode
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc import observe
 
 logger = logging.getLogger()
 
@@ -173,13 +173,12 @@ def compute_ao_slices(mol, auxmol):
     return blocks
 
 def build_coulomb_matrix(mode: Mode, mol: gto.Mole, auxmol: gto.Mole, X, mo_coeff):
-    active = ExperimentRun.get_active()
     n_occ = mol.nelectron // 2
     n_vir = mol.nao_nr() - n_occ
 
     S = build_S(mode, X, n_occ)
     S_inv = lib.pinv(S)
-    if active: active.checkpoint(METRIC_INVERSION)
+    observe.checkpoint(METRIC_INVERSION)
 
     j2c_inv = build_aux_coulomb_inv(auxmol)
     E = contract_codensity_df_eri(mode, X, mo_coeff, mol, auxmol, j2c_inv, n_occ, n_vir)
@@ -189,7 +188,6 @@ def build_coulomb_matrix(mode: Mode, mol: gto.Mole, auxmol: gto.Mole, X, mo_coef
     return D
 
 def build_coulomb_matrix_asym(mode: Mode, mol: gto.Mole, auxmol: gto.Mole, X_alpha, X_beta, mo_coeff):
-    active = ExperimentRun.get_active()
 
     S = mol.spin
     N = mol.nao_nr()
@@ -206,7 +204,7 @@ def build_coulomb_matrix_asym(mode: Mode, mol: gto.Mole, auxmol: gto.Mole, X_alp
 
     S_bb = build_S(mode, X_beta, nocc_beta)
     S_bb_inv = lib.pinv(S_bb)
-    if active: active.checkpoint(METRIC_INVERSION)
+    observe.checkpoint(METRIC_INVERSION)
 
     j2c_inv = build_aux_coulomb_inv(auxmol)
     E_aa = contract_codensity_df_eri(mode, X_alpha, mo_coeff_alpha,

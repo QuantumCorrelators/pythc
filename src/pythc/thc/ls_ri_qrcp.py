@@ -11,7 +11,7 @@ from pythc.thc.ls_thc_funcs import eval_basefuncs
 from pythc.thc.thc_base import Mode
 from pythc.thc.checkpoints import GRID_BUILD, GRID_PRUNING, BASIS_FUNCTION_EVAL
 from pythc.thc.ls_ri_thc import LS_RI_THC
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc import observe
 
 logger = logging.getLogger()
 
@@ -97,16 +97,15 @@ class LS_RI_QRCP(LS_RI_THC):
         Raises:
             ValueError: If the threshold is too high and all auxiliary functions are pruned.
         """
-        active = ExperimentRun.get_active()
         grid, weigths = self.grid.build()
-        if active: active.checkpoint(GRID_BUILD)
+        observe.checkpoint(GRID_BUILD)
 
         logger.info(f"built grid of size: {len(grid)}")
 
         Rs = eval_basefuncs(self.mol, grid)  # Renamed for clarity
         Rs = (np.sqrt(np.sqrt(weigths))[:, np.newaxis] * Rs)
         logger.info(f"got {Rs.shape} basis function on grid matrix")
-        if active: active.checkpoint(BASIS_FUNCTION_EVAL)
+        observe.checkpoint(BASIS_FUNCTION_EVAL)
 
         rows, cols = np.triu_indices(self.N, k=0)
 
