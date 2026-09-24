@@ -1,15 +1,17 @@
 import logging
+from typing import Optional
 
 import numpy as np
 import pyscf.lib as pyscflib
 from pyscf import gto, df
 from pyscf.scf import ghf
-from pyscf.scf.ghf import GHF
-from pyscf.scf.hf import RHF
-from pyscf.scf.uhf import UHF
+from pyscf.scf.ghf import GHF as PyscfGHF
+from pyscf.scf.hf import RHF as PyscfRHF
+from pyscf.scf.uhf import UHF as PyscfUHF
 
-from pythc.methods.thc_df import THCDF
-from pythc.thc.thc_base import ThcEri
+from pythc.methods.scf import THCDF
+from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
+from pythc.thc.thc_base import ThcEri, THC
 
 logger = logging.getLogger()
 
@@ -19,7 +21,7 @@ logger = logging.getLogger()
 # afterwards, plus spin combining and the RHF/UHF/GHF Fock factors.
 
 
-class THCMixin:
+class DensityDifferenceSCF:
     """
     Thin density-difference wrapper around the THC J/K engine.
 
@@ -28,7 +30,7 @@ class THCMixin:
     baseline. Pure THC (no baseline) is served by stock PySCF SCF with
     ``mf.with_df = THCDF(...)``.
     """
-    def init_thc(self, mol: gto.Mole, eri_thc: ThcEri, auxbasis: str = None,
+    def init_thc(self, mol: gto.Mole, thc: Optional[THC] = None, auxbasis: Optional[str] = None,
                  verbose: int = 0,
                  with_j_thc: bool = True, with_k_thc: bool = True):
         self.verbose = verbose
@@ -46,11 +48,13 @@ class THCMixin:
         if self.auxbasis:
             self.df_obj.auxbasis = self.auxbasis
 
+        thc = thc if thc else LS_RI_Cholesky(mol, auxbasis=self.auxbasis, cholesky_threshold=1e-8)
+
         # Single DF-style J/K engine. It shares the exact DF object as its
         # internal baseline, so the DF-ERI is built at most once. Flip
         # with_df.with_j_thc / .with_k_thc for THC/DF routing per term
         # (with_j_thc=False selects "only-K": J via DF/RI, K via THC).
-        self.with_df = THCDF(mol, eri_thc, auxbasis,
+        self.with_df = THCDF(mol, thc, auxbasis,
                              baseline=self.df_obj,
                              with_j_thc=with_j_thc, with_k_thc=with_k_thc)
 
@@ -81,13 +85,32 @@ class THCMixin:
     def get_jk_thc(self, dm=None, hermi=1, with_j=True, with_k=True):
         raise NotImplementedError
 
+class RHF(DensityDifferenceSCF, PyscfRHF):
+    def __init__(self, mol: gto.Mole, thc: Optional[THC] = None, auxbasis: Optional[str] = None,
+                 verbose: int = 0,
+                 with_j_thc: bool = True, with_k_thc: bool = True):
+        PyscfRHF.__init__(self, mol)
+        self.init_thc(mol, thc, auxbasis, verbose=verbose,
+                      with_j_thc=with_j_thc, with_k_thc=with_k_thc)
 
-class THC_UHF(THCMixin, UHF):
-    def __init__(self, mol: gto.Mole, eri_thc, auxbasis: str = None,
+    def _exact_vhf(self, mol, dm, hermi):
+        vj, vk = self.df_obj.get_jk(dm, hermi=hermi)
+        return vj - vk * 0.5
+
+    def _combine_thc_vhf(self, ref_vhf, vj_thc, vk_thc):
+        return ref_vhf + vj_thc - vk_thc * 0.5
+
+    def get_jk_thc(self, dm=None, hermi=1, with_j=True, with_k=True):
+        if dm is None: dm = self.make_rdm1()
+        # with_df handles arbitrary leading batch dims itself.
+        return self.with_df.get_jk(np.asarray(dm), hermi, with_j, with_k)
+
+class UHF(DensityDifferenceSCF, PyscfUHF):
+    def __init__(self, mol: gto.Mole, thc: Optional[THC] = None, auxbasis: Optional[str] = None,
                  verbose: int = 4,
                  with_j_thc: bool = True, with_k_thc: bool = True):
-        UHF.__init__(self, mol)
-        self.init_thc(mol, eri_thc, auxbasis, verbose=verbose,
+        PyscfUHF.__init__(self, mol)
+        self.init_thc(mol, thc, auxbasis, verbose=verbose,
                       with_j_thc=with_j_thc, with_k_thc=with_k_thc)
 
     def _exact_vhf(self, mol, dm, hermi):
@@ -118,36 +141,16 @@ class THC_UHF(THCMixin, UHF):
         return vj, vk
 
 
-class THC_RHF(THCMixin, RHF):
-    def __init__(self, mol: gto.Mole, eri_thc: ThcEri, auxbasis: str = None,
+class GHF(DensityDifferenceSCF, PyscfGHF):
+    def __init__(self, mol: gto.Mole, thc: Optional[THC] = None, auxbasis: Optional[str] = None,
                  verbose: int = 0,
                  with_j_thc: bool = True, with_k_thc: bool = True):
-        RHF.__init__(self, mol)
-        self.init_thc(mol, eri_thc, auxbasis, verbose=verbose,
-                      with_j_thc=with_j_thc, with_k_thc=with_k_thc)
-
-    def _exact_vhf(self, mol, dm, hermi):
-        vj, vk = self.df_obj.get_jk(dm, hermi=hermi)
-        return vj - vk * 0.5
-
-    def _combine_thc_vhf(self, ref_vhf, vj_thc, vk_thc):
-        return ref_vhf + vj_thc - vk_thc * 0.5
-
-    def get_jk_thc(self, dm=None, hermi=1, with_j=True, with_k=True):
-        if dm is None: dm = self.make_rdm1()
-        # with_df handles arbitrary leading batch dims itself.
-        return self.with_df.get_jk(np.asarray(dm), hermi, with_j, with_k)
-
-class THC_GHF(THCMixin, GHF):
-    def __init__(self, mol: gto.Mole, eri_thc: ThcEri, auxbasis: str = None,
-                 verbose: int = 0,
-                 with_j_thc: bool = True, with_k_thc: bool = True):
-        GHF.__init__(self, mol)
-        self.init_thc(mol, eri_thc, auxbasis, verbose=verbose,
+        PyscfGHF.__init__(self, mol)
+        self.init_thc(mol, thc, auxbasis, verbose=verbose,
                       with_j_thc=with_j_thc, with_k_thc=with_k_thc)
         # Exact baseline must understand spin-orbital (2N, 2N) densities.
         # (with_df keeps the plain DF baseline for spatial densities.)
-        self.df_obj = GHF(mol).density_fit(self.auxbasis)
+        self.df_obj = PyscfGHF(mol).density_fit(self.auxbasis)
 
     def _exact_vhf(self, mol, dm, hermi):
         vj, vk = self.df_obj.get_jk(mol, dm, hermi=hermi)

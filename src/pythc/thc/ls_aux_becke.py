@@ -113,7 +113,10 @@ class LS_Aux_Becke(THC):
         if active: active.checkpoint(FITTING_MATRIX)
 
         logger.info(f"built THC with Z: {Z.shape}, X: {X_pruned.shape}")
-        return ThcEri(self.mol.nelectron, X_pruned, Z, D)
+        # Store D transposed so its rows match the grid points (M, N), the
+        # same convention as LS_RI_THC/LS_RI_Cholesky/LS_snRI_Cholesky
+        # (the only consumer, methods.rpa.thc_rpa, requires D rows == X rows).
+        return ThcEri(self.mol.nelectron, X_pruned, Z, D.T)
 
     def build_unrestricted(self, mode: Mode = "ao") -> ThcEriUnrestricted:
         """

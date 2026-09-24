@@ -1,13 +1,13 @@
 import logging
+from typing import Optional
 
 import numpy as np
 from numba import prange, njit
-from pyscf import gto
 from pyscf.gw.rpa import _get_scaled_legendre_roots
-from scipy.optimize import least_squares
+from pyscf.scf.hf import SCF
 
-from pythc.methods.runner import SCF
-from pythc.thc.thc_base import ThcEri
+from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
+from pythc.thc.thc_base import ThcEri, THC
 
 logger = logging.getLogger()
 
@@ -60,8 +60,8 @@ def build_pi_optimized(X_o, X_v, e_o, e_v, freq):
 
     return pi
 
-
-def thc_rpa(mol: gto.Mole, mf: SCF, eri_thc: ThcEri):
+def thc_rpa(mf: SCF, eri_thc: ThcEri):
+    mol = mf.mol
     X, Z = eri_thc.get_X_Z()
     D = eri_thc.get_D()
 
@@ -90,91 +90,13 @@ def thc_rpa(mol: gto.Mole, mf: SCF, eri_thc: ThcEri):
     E_corr = E / (2.0 * np.pi)
     return E_corr
 
-
-def build_M_tau(X_o, X_v, e_o, e_v, D, tau):
-    """
-    Computes the auxiliary matrix M(tau) in O(N^3) steps using pure BLAS.
-    """
-    # 1. Scale rows by exponential factors
-    # np.newaxis ensures the arrays broadcast correctly across the grid
-    X_o_tau = X_o * np.exp(e_o * tau)[:, np.newaxis]
-    X_v_tau = X_v * np.exp(-e_v * tau)[:, np.newaxis]
-
-    # 2. Form Occupied and Virtual intermediates (O(N_grid^2 * N_occ/vir))
-    # Resulting shapes are (n_grid, n_grid)
-    O = np.dot(X_o_tau.T, X_o)
-    V = np.dot(X_v_tau.T, X_v)
-
-    # 3. Hadamard product for Pi(tau)
-    Pi_tau = 4.0 * (O * V)
-
-    # 4. Project into auxiliary basis to form M(tau) (O(N_aux^2 * N_grid))
-    return D.T @ Pi_tau @ D
-
-class RPA():
-    def __init__(self, mol, mf, eri_thc):
-        self.mol = mol
+class RPA:
+    def __init__(self, mf: SCF, thc: Optional[THC]):
+        self.mol = mf.mol
         self.mf = mf
-        self.eri_thc = eri_thc
+        self.thc = thc if thc else LS_RI_Cholesky(self.mol, mo_coeff=self.mf.mo_coeff, cholesky_threshold=1e-5)
 
     def kernel(self):
-        e = self.mf.mo_energy
-        n_occ = self.mol.nelectron // 2
-
-        e_o = e[:n_occ]
-        e_v = e[n_occ:]
-
-        # For spacetime RPA, the Laplace variables exponentiate the single particle-hole
-        # gap (e_a - e_i), as seen in build_M_tau. Therefore, the grid must be
-        # optimized for the single gap spectrum, not the doubled MP2 gap.
-        ymin = np.min(e_v) - np.max(e_o)
-        ymax = np.max(e_v) - np.min(e_o)
-
-        import laplace_minimax as lm
-        grid = lm.get_laplace_grid(ymin=ymin, ymax=ymax, tolerr=1e-6)
-
-        return thc_rpa_spacetime(self.mol, self.mf, self.eri_thc, grid.exponents, grid.weights)
-
-
-
-def thc_rpa_spacetime(mol, mf, eri_thc, taus, tau_weights):
-    X, Z = eri_thc.get_X_Z()
-    D = eri_thc.get_D()
-
-    n_occ = mol.nelectron // 2
-    n_aux = D.shape[1]
-
-    X_o = np.ascontiguousarray(X[:, :n_occ].T)
-    X_v = np.ascontiguousarray(X[:, n_occ:].T)
-
-    e = mf.mo_energy
-    e_o = e[:n_occ]
-    e_v = e[n_occ:]
-
-    # --- 1. IMAGINARY TIME LOOP (The Heavy Lifting) ---
-    # We do the O(N^3) operations strictly on the short tau grid (e.g. ~15 points)
-    M_taus = []
-    for tau in taus:
-        M_taus.append(build_M_tau(X_o, X_v, e_o, e_v, D, tau))
-
-    # --- 2. FREQUENCY LOOP (The Cheap Part) ---
-    # We loop over the 40 frequency points, but only do O(N_aux^3) and O(N_aux^2) math
-    E = 0.0
-    homo_lumo_gap = e_v[0] - e_o[-1]
-    freqs, omega_weights = _get_scaled_legendre_roots(40, homo_lumo_gap)
-
-    for freq, w_omega in zip(freqs, omega_weights):
-        # Fourier transform M(tau) -> M(i omega)
-        M_omega = np.zeros((n_aux, n_aux))
-        for tau, w_tau, M_t in zip(taus, tau_weights, M_taus):
-            M_omega += M_t * w_tau * np.cos(freq * tau)
-
-        # Standard RPA energy evaluation
-        sign, logabsdet = np.linalg.slogdet(np.eye(n_aux) + M_omega)
-        trace = np.trace(M_omega)
-        E += w_omega * (logabsdet - trace)
-
-    E_corr = E / (2.0 * np.pi)
-    return E_corr
-
+        eri = self.thc.build(mode='ov')
+        return thc_rpa(self.mf, eri)
 

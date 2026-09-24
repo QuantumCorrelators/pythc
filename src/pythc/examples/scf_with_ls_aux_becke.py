@@ -3,7 +3,7 @@ import sys
 
 from pyscf import gto
 
-from pythc.methods.hf import THC_RHF
+from pythc.methods.scfdd import RHF
 from pythc.thc.ls_aux_becke import LS_Aux_Becke
 
 logging.basicConfig(
@@ -28,9 +28,8 @@ def main():
     auxbasis = 'cc-pvdz-ri'
 
     thc = LS_Aux_Becke(mol=mol, fit_auxbasis='cc-pvdz')
-    eri = thc.build(mode='ao')
-
-    mf = THC_RHF(mol, eri, auxbasis)
+    mf = RHF(mol, thc, auxbasis)
+    mf.verbose = 4
     scf_e = mf.kernel()
 
     print(f'SCF E: {scf_e}')

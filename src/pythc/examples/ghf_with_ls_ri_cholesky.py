@@ -1,6 +1,6 @@
 from pyscf import gto, scf
 
-from pythc.methods.thc_df import THCDF
+from pythc.methods.scf import THCDF
 from pythc.thc.ls_snri_cholesky import LS_snRI_Cholesky
 
 mol = gto.Mole()
@@ -22,11 +22,11 @@ e_ghf = mf.kernel()
 dm_exact = mf.make_rdm1()
 
 thc = LS_snRI_Cholesky(mol, cholesky_threshold=1e-9)
-eri = thc.build()
-
 # Pure THC-SCF: stock PySCF GHF with the THC integral object.
 # Spin-block splitting and the spin-orbital Fock factors stay in PySCF.
-thc_mf = scf.GHF(mol).density_fit(with_df=THCDF(mol, eri, auxbasis=auxbasis))
+dfo = THCDF(mol, thc, auxbasis=auxbasis).build()
+
+thc_mf = scf.GHF(mol).density_fit(with_df=dfo)
 thc_mf.verbose = 4
 e_ghf_thc = thc_mf.kernel()
 dm_thc = thc_mf.make_rdm1()
@@ -44,7 +44,7 @@ mf_cross = scf.GHF(mol=mol).density_fit(auxbasis=auxbasis)
 mf_cross.verbose = 0
 e_xrt = mf_cross.kernel(dm0=dm_thc)
 
-thc_mf_cross = scf.GHF(mol).density_fit(with_df=THCDF(mol, eri, auxbasis=auxbasis))
+thc_mf_cross = scf.GHF(mol).density_fit(with_df=dfo)
 thc_mf_cross.verbose = 0
 e_trt = thc_mf_cross.kernel(dm0=dm_exact)
 

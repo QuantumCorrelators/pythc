@@ -33,14 +33,12 @@ def main():
     mf.verbose = 4
     mf.kernel()
 
-
     thc = LS_Aux_Becke(mol=mol, fit_auxbasis='cc-pvdz', mo_coeff=mf.mo_coeff)
-    eri = thc.build(mode='ov')
 
-    mp2_ref = DFMP2(mf).kernel()[0]
+    mp2_ref = DFMP2(mf).kernel()
     print(f'MP2 RI Reference: {mp2_ref}')
 
-    mp2e = LaplaceRMP2(mol, mf, eri, n_laplace=10).kernel()
+    mp2e = LaplaceMP2(mf, thc).kernel()
     print(f'MP2 E corr: {mp2e}')
 
 if __name__ == '__main__':

@@ -90,6 +90,39 @@ def pseudo_inv_sqrt(M: np.ndarray, epsilon: float = 1e-10) -> np.ndarray:
 
     return (eig_vecs * inv_sqrt_vals) @ eig_vecs.T
 
+def available_memory_bytes():
+    """Available system memory minus safety reserves, with SLURM cgroup awareness."""
+    available = psutil.virtual_memory().available
+
+    # On SLURM, the cgroup memory limit may be tighter than system-wide available
+    try:
+        # cgroup v2
+        with open('/sys/fs/cgroup/memory.max', 'r') as f:
+            cg_limit = f.read().strip()
+        if cg_limit != 'max':
+            with open('/sys/fs/cgroup/memory.current', 'r') as f:
+                cg_current = int(f.read().strip())
+            cg_avail = int(cg_limit) - cg_current
+            available = min(available, cg_avail)
+    except (FileNotFoundError, PermissionError, ValueError):
+        try:
+            # cgroup v1
+            with open('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'r') as f:
+                cg_limit = int(f.read().strip())
+            with open('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'r') as f:
+                cg_current = int(f.read().strip())
+            # Ignore absurdly high limits (not set)
+            if cg_limit < 2**62:
+                cg_avail = cg_limit - cg_current
+                available = min(available, cg_avail)
+        except (FileNotFoundError, PermissionError, ValueError):
+            pass
+
+    thread_count = int(os.environ.get('OMP_NUM_THREADS', str(os.cpu_count() or 1)))
+    thread_reserve = thread_count * 15 * 1024 * 1024
+    return max(0, available - thread_reserve - 4 * 1024**3)
+
+
 def current_memory() -> float:
     process = psutil.Process(os.getpid())
     mem_bytes = process.memory_info().rss # Resident Set Size

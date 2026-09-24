@@ -32,9 +32,9 @@ def main():
     ao_thc = LS_RI_Cholesky(mol, auxbasis=auxbasis, cholesky_threshold=1e-9)
     ao_eri = ao_thc.build(mode='ao')
 
-    mf = THC_UHF(mol=mol,
-                 eri_thc=ao_eri,
-                 auxbasis=auxbasis)
+    mf = UHF(mol=mol,
+             eri_thc=ao_eri,
+             auxbasis=auxbasis)
 
     mf.kernel()
 

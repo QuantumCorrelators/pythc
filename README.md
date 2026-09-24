@@ -155,7 +155,7 @@ The THC J/K engine is `THCDF` (`pythc.methods.thc_df`), which implements the `py
 from pyscf import scf
 from pythc.grid import BeckeGrid
 from pythc.thc.ls_ri_becke import LS_RI_Becke
-from pythc.methods.thc_df import THCDF
+from pythc.methods.scf import THCDF
 
 auxbasis = 'cc-pvdz-ri'
 grid_builder = BeckeGrid(mol)
@@ -177,9 +177,9 @@ mf.with_df = THCDF(mol, thc_eri, auxbasis=auxbasis, with_j_thc=False)
 For an exact-DF baseline that switches to the THC density-difference ansatz after the first SCF cycle, use the `THC_RHF` / `THC_UHF` / `THC_GHF` wrappers from `pythc.methods.hf` (same constructor arguments plus the `with_j_thc` / `with_k_thc` flags):
 
 ```python
-from pythc.methods.hf import THC_RHF
+from pythc.methods.scfdd import RHF
 
-mf = THC_RHF(mol, thc_eri, auxbasis, verbose=4)
+mf = RHF(mol, thc_eri, auxbasis, verbose=4)
 mf.kernel()
 ```
 

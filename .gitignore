@@ -365,3 +365,5 @@ pyrightconfig.json
 
 pythc_v0.0.1_dataset.json
 *.gz
+
+.serena

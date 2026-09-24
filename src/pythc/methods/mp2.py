@@ -1,10 +1,7 @@
 import gc
 import logging
 import math
-import os
-import sys
-
-import psutil
+from typing import Optional
 
 from numba import njit, prange
 from pyscf import gto
@@ -13,10 +10,11 @@ from pyscf.gw.gw_ac import _get_scaled_legendre_roots
 from pyscf.scf.hf import SCF
 
 import pythc.lib as lib
-from pythc.thc.thc_base import ERI, ThcEri
+from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
+from pythc.thc.ls_snri_cholesky import LS_snRI_Cholesky
+from pythc.thc.thc_base import ERI, ThcEri, THC
 from pythc.thc.thc_base import ThcEriUnrestricted
 from pythc.tracking.experiment_run import ExperimentRun
-
 
 if lib.has_cuda_gpu():
     import cupy as xp
@@ -24,8 +22,6 @@ else:
     import numpy as xp
 
 logger = logging.getLogger()
-
-
 
 
 def calculate_optimal_tile_size(a, b, cache_fraction: float = 0.85) -> int:
@@ -191,40 +187,6 @@ def _build_B(Z, X_o, X_v):
 # ============================================================================
 # Optimized MP2 J/K: memory-safe, symmetry-exploiting, BLAS-optimized
 # ============================================================================
-
-def _available_memory_bytes():
-    """Available system memory minus safety reserves, with SLURM cgroup awareness."""
-    available = psutil.virtual_memory().available
-
-    # On SLURM, the cgroup memory limit may be tighter than system-wide available
-    try:
-        # cgroup v2
-        with open('/sys/fs/cgroup/memory.max', 'r') as f:
-            cg_limit = f.read().strip()
-        if cg_limit != 'max':
-            with open('/sys/fs/cgroup/memory.current', 'r') as f:
-                cg_current = int(f.read().strip())
-            cg_avail = int(cg_limit) - cg_current
-            available = min(available, cg_avail)
-    except (FileNotFoundError, PermissionError, ValueError):
-        try:
-            # cgroup v1
-            with open('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'r') as f:
-                cg_limit = int(f.read().strip())
-            with open('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'r') as f:
-                cg_current = int(f.read().strip())
-            # Ignore absurdly high limits (not set)
-            if cg_limit < 2**62:
-                cg_avail = cg_limit - cg_current
-                available = min(available, cg_avail)
-        except (FileNotFoundError, PermissionError, ValueError):
-            pass
-
-    thread_count = int(os.environ.get('OMP_NUM_THREADS', str(os.cpu_count() or 1)))
-    thread_reserve = thread_count * 15 * 1024 * 1024
-    return max(0, available - thread_reserve - 4 * 1024**3)
-
-
 def _tile_size_from_budget(budget_bytes, n_j, itemsize):
     """Compute the largest tile T such that tile-pair memory fits within budget.
 
@@ -376,7 +338,7 @@ def _calculate_mp2_K_optimized(tau_o, tau_v, X_o, X_v, Z):
     n_virt = X_v.shape[1]
     itemsize = X_o.dtype.itemsize
 
-    available = _available_memory_bytes()
+    available = lib.available_memory_bytes()
     B_full_bytes = n_grid * n_occ * n_virt * itemsize
 
     # Per-Laplace overhead: X_o_tau + X_v_tau_T (always needed)
@@ -500,35 +462,6 @@ def _mp2_K_blocked(tau_o, tau_v, X_o, X_v, Z, j_block_size, GRID_TILE):
     return mp2_K
 
 
-def mp2_energy_sos(mol: gto.Mole, mf: SCF, thc: ThcEri, n_laplace: int = 10, J_calc=_calculate_mp2_J_optimized):
-    active: ExperimentRun = ExperimentRun.get_active()
-    nocc = mol.nelectron // 2
-    nvir = mol.nao_nr() - nocc
-
-    thc.to_backend()
-
-    e = lib.to_backend(mf.mo_energy)
-    e_o = e[:nocc]
-    e_v = e[nocc:]
-
-    t, w = lib.to_backend(_get_scaled_legendre_roots(n_laplace))
-
-    tau_o, tau_v = xp.zeros((n_laplace, nocc)), xp.zeros((n_laplace, nvir))
-    for v in range(n_laplace):
-        tau_o[v, :] = xp.pow(w[v], 1 / 4) * xp.exp(+t[v] * e_o)
-        tau_v[v, :] = xp.pow(w[v], 1 / 4) * xp.exp(-t[v] * e_v)
-
-    X, Z = thc.get_X_Z()
-    X_o = X[:, :nocc]
-    X_v = X[:, nocc:]
-    if active: active.checkpoint("mp2_laplace_setup")
-
-
-    mp2_J = J_calc(tau_o, tau_v, X_o, X_v, Z)
-    if active: active.checkpoint("mp2_laplace_J_build")
-
-    return -1.3 * mp2_J
-
 
 def get_ump2_inputs(mf: SCF, mol: Mole, n_laplace: int, thc: ThcEriUnrestricted):
     S = mol.spin
@@ -568,29 +501,18 @@ def get_ump2_inputs(mf: SCF, mol: Mole, n_laplace: int, thc: ThcEriUnrestricted)
     return X_o_alpha, X_o_beta, X_v_alpha, X_v_beta, Z_aa, Z_bb, Z_ab, tau_o_alpha, tau_o_beta, tau_v_alpha, tau_v_beta, nocc_alpha, nocc_beta
 
 
-def ump2_energy_sos(mol: gto.Mole, mf: SCF, thc: ThcEriUnrestricted, n_laplace: int = 10,
-                    J_calc_mixed=_calculate_ump2_J_mixed):
-    X_o_alpha, X_o_beta, X_v_alpha, X_v_beta, _, _, Z_ab, tau_o_alpha, tau_o_beta, tau_v_alpha, tau_v_beta, nocc_alpha, nocc_beta \
-        = get_ump2_inputs(mf, mol, n_laplace, thc)
-
-    if nocc_alpha == 0 or nocc_beta == 0:
-        return 0.0
-
-    mp2_J_ab = J_calc_mixed(
-        tau_o_alpha, tau_v_alpha, X_o_alpha, X_v_alpha,
-        tau_o_beta, tau_v_beta, X_o_beta, X_v_beta,
-        Z_ab
-    )
-
-    return -1.3 * mp2_J_ab
-
-
 def ump2_energy_laplace(mol: gto.Mole, mf: SCF, thc: ThcEriUnrestricted, n_laplace: int = 10,
-                        J_calc=_calculate_mp2_J_optimized, K_calc=_calculate_mp2_K_optimized, J_calc_mixed=_calculate_ump2_J_mixed):
+                        aac = 0.5, bbc = 0.5, abc = 1.0,
+                        J_calc=_calculate_mp2_J_optimized, K_calc=_calculate_mp2_K_optimized, J_calc_mixed=_calculate_ump2_J_mixed)\
+        -> tuple[float,...]:
+
     X_o_alpha, X_o_beta, X_v_alpha, X_v_beta, Z_aa, Z_bb, Z_ab, tau_o_alpha, tau_o_beta, tau_v_alpha, tau_v_beta, nocc_alpha, nocc_beta \
         = get_ump2_inputs(mf, mol, n_laplace, thc)
 
-    if nocc_alpha > 0:
+    mp2_J_aa, mp2_J_ab, mp2_J_bb = 0.0, 0.0, 0.0
+    mp2_K_aa, mp2_K_bb = 0.0, 0.0
+
+    if nocc_alpha > 0 and aac != 0:
         mp2_J_aa = J_calc(tau_o_alpha, tau_v_alpha, X_o_alpha, X_v_alpha, Z_aa)
         logger.debug(f"J-alpha = {mp2_J_aa}")
 
@@ -599,7 +521,7 @@ def ump2_energy_laplace(mol: gto.Mole, mf: SCF, thc: ThcEriUnrestricted, n_lapla
     else:
         mp2_J_aa = mp2_K_aa = 0.0
 
-    if nocc_beta > 0:
+    if nocc_beta > 0 and bbc != 0:
         mp2_J_bb = J_calc(tau_o_beta, tau_v_beta, X_o_beta, X_v_beta, Z_bb)
         logger.debug(f"J-beta = {mp2_J_bb}")
 
@@ -608,7 +530,7 @@ def ump2_energy_laplace(mol: gto.Mole, mf: SCF, thc: ThcEriUnrestricted, n_lapla
     else:
         mp2_J_bb = mp2_K_bb = 0.0
 
-    if nocc_alpha > 0 and nocc_beta > 0:
+    if nocc_alpha > 0 and nocc_beta > 0 and abc != 0:
         mp2_J_ab = J_calc_mixed(
             tau_o_alpha, tau_v_alpha, X_o_alpha, X_v_alpha,
             tau_o_beta, tau_v_beta, X_o_beta, X_v_beta,
@@ -618,22 +540,21 @@ def ump2_energy_laplace(mol: gto.Mole, mf: SCF, thc: ThcEriUnrestricted, n_lapla
     else:
         mp2_J_ab = 0.0
 
-    E_aa = 0.5 * (-mp2_J_aa + mp2_K_aa)
-    E_bb = 0.5 * (-mp2_J_bb + mp2_K_bb)
-    E_ab = -mp2_J_ab
+    E_aa = aac * (-mp2_J_aa + mp2_K_aa)
+    E_bb = bbc * (-mp2_J_bb + mp2_K_bb)
+    E_ab = -abc * mp2_J_ab
 
     logger.info(f"E_aa: {E_aa:3f} + E_bb: {E_bb:3f} + E_ab: {E_ab:3f} = {E_aa + E_bb + E_ab}")
-    return E_aa + E_bb + E_ab
+    return E_aa + E_bb + E_ab, mp2_J_aa, mp2_J_ab, mp2_J_bb, mp2_K_aa, mp2_K_bb
 
 
-def mp2_energy_laplace(mol: gto.Mole, mf: SCF, thc: ThcEri, n_laplace: int = 10, J_calc=_calculate_mp2_J_optimized,
-                       K_calc=_calculate_mp2_K_optimized) -> float:
+def mp2_energy_laplace(mol: gto.Mole, mf: SCF, thc: ThcEri, n_laplace: int = 10, jc = 2.0, kc = 1.0, J_calc=_calculate_mp2_J_optimized,
+                       K_calc=_calculate_mp2_K_optimized) -> tuple[float,...]:
     active: ExperimentRun = ExperimentRun.get_active()
 
     thc.to_backend() # copy to GPU is needed
 
     nocc = mol.nelectron // 2
-    nvir = mol.nao_nr() - nocc
 
     e = lib.to_backend(mf.mo_energy)
     e_o = e[:nocc]
@@ -649,14 +570,18 @@ def mp2_energy_laplace(mol: gto.Mole, mf: SCF, thc: ThcEri, n_laplace: int = 10,
     X_v = X[:, nocc:]
     if active: active.checkpoint("mp2_laplace_setup")
 
-    logger.info("calculating J")
-    mp2_J = J_calc(tau_o, tau_v, X_o, X_v, Z)
-    if active: active.checkpoint("mp2_laplace_J_build")
-    gc.collect()
+    mp2_J, mp2_K = 0.0, 0.0
 
-    logger.info("calculating K")
-    mp2_K = K_calc(tau_o, tau_v, X_o, X_v, Z)
-    if active: active.checkpoint("mp2_laplace_K_build")
+    if jc != 0:
+        logger.info("calculating J")
+        mp2_J = J_calc(tau_o, tau_v, X_o, X_v, Z)
+        if active: active.checkpoint("mp2_laplace_J_build")
+        gc.collect()
+
+    if kc != 0:
+        logger.info("calculating K")
+        mp2_K = K_calc(tau_o, tau_v, X_o, X_v, Z)
+        if active: active.checkpoint("mp2_laplace_K_build")
 
     if active:
         if "mp2_e_thc_J" in active.metrics:
@@ -669,7 +594,7 @@ def mp2_energy_laplace(mol: gto.Mole, mf: SCF, thc: ThcEri, n_laplace: int = 10,
         else:
             active.metrics["mp2_e_thc_K"] = [float(mp2_K)]
 
-    return -2.0 * mp2_J + mp2_K
+    return (-jc * mp2_J) + (kc * mp2_K), mp2_J, mp2_K
 
 
 def _build_delta(e_o, e_v):
@@ -701,58 +626,58 @@ def mp2_energy(mol: gto.Mole, mf: SCF, eri_thc: ERI) -> float:
 
     return mp2_e
 
-
-class RMP2:
-    def __init__(self, mol: gto.Mole, mf: SCF, eri_thc: ERI):
-        self.mol = mol
+class MP2:
+    def __init__(self, mf: SCF, thc: Optional[THC] = None):
         self.mf = mf
-        self.eri_thc = eri_thc
+        self.mol = mf.mol
+        self.thc = thc if thc else LS_snRI_Cholesky(self.mol, cholesky_threshold=1e-9)
 
-    def kernel(self):
-        return mp2_energy(self.mol, self.mf, self.eri_thc)
+    def kernel(self) -> tuple[float,...]:
+        eri = self.thc.build(mode='ov')
+        return (mp2_energy(self.mol, self.mf, eri),)
 
-class LaplaceRMP2:
-    def __init__(self,mol: gto.Mole, mf: SCF, thc: ThcEri, n_laplace: int = 10):
-        self.mol = mol
+class LaplaceMP2:
+    def __init__(self, mf: SCF, thc: Optional[THC] = None, n_laplace : int = 10, jc: Optional[float] = None, kc: Optional[float] = None):
         self.mf = mf
-        self.thc = thc
+        self.mol = mf.mol
+        self.thc = thc if thc else LS_snRI_Cholesky(self.mol, cholesky_threshold=1e-5)
         self.n_laplace = n_laplace
+        self.jc, self.kc = jc, kc
 
-    def kernel(self):
-        return mp2_energy_laplace(self.mol, self.mf, self.thc, n_laplace=self.n_laplace)
+    def kernel(self) -> tuple[float,...]:
+        eri = self.thc.build(mode='ov')
+        return mp2_energy_laplace(self.mol, self.mf, eri, self.n_laplace)
 
-
-class LaplaceRMP2SCS:
-    def __init__(self,mol: gto.Mole, mf: SCF, thc: ThcEri, n_laplace: int = 10):
-        self.mol = mol
+class LaplaceSOSMP2:
+    def __init__(self, mf: SCF, thc: Optional[THC] = None, n_laplace : int = 10, jc: Optional[float] = None, kc: Optional[float] = None):
         self.mf = mf
-        self.thc = thc
+        self.mol = mf.mol
+        self.thc = thc if thc else LS_snRI_Cholesky(self.mol, cholesky_threshold=1e-5)
         self.n_laplace = n_laplace
+        self.jc, self.kc = jc, kc
 
-    def kernel(self):
-        return mp2_energy_sos(self.mol, self.mf, self.thc, n_laplace=self.n_laplace)
-
-MP2 = LaplaceRMP2
+    def kernel(self) -> tuple[float,...]:
+        eri = self.thc.build(mode='ov')
+        return mp2_energy_laplace(self.mol, self.mf, eri, self.n_laplace, jc=1.3, kc=0.0)
 
 class LaplaceUMP2:
-    def __init__(self,mol: gto.Mole, mf: SCF, thc: ThcEriUnrestricted, n_laplace: int = 10):
-        self.mol = mol
+    def __init__(self, mf: SCF, thc: Optional[THC] = None, n_laplace : int = 10):
         self.mf = mf
-        self.thc = thc
+        self.mol = mf.mol
+        self.thc = thc if thc else LS_RI_Cholesky(self.mol, mo_coeff=mf.mo_coeff, cholesky_threshold=1e-5)
         self.n_laplace = n_laplace
 
-    def kernel(self):
-        return ump2_energy_laplace(self.mol, self.mf, self.thc, n_laplace=self.n_laplace)
+    def kernel(self) -> tuple[float,...]:
+        eri = self.thc.build_unrestricted(mode='ov')
+        return ump2_energy_laplace(self.mol, self.mf, eri, self.n_laplace)
 
-
-class LaplaceUMP2SOS:
-    def __init__(self,mol: gto.Mole, mf: SCF, thc: ThcEriUnrestricted, n_laplace: int = 10):
-        self.mol = mol
+class LaplaceSOSUMP2:
+    def __init__(self, mf: SCF, thc: Optional[THC] = None, n_laplace : int = 10):
         self.mf = mf
-        self.thc = thc
+        self.mol = mf.mol
+        self.thc = thc if thc else LS_RI_Cholesky(self.mol, mo_coeff=mf.mo_coeff, cholesky_threshold=1e-5)
         self.n_laplace = n_laplace
 
-    def kernel(self):
-        return ump2_energy_sos(self.mol, self.mf, self.thc, n_laplace=self.n_laplace)
-
-UMP2 = LaplaceRMP2
+    def kernel(self) -> tuple[float,...]:
+        eri = self.thc.build_unrestricted(mode='ov')
+        return ump2_energy_laplace(self.mol, self.mf, eri, self.n_laplace, aac=0.0, bbc=0.0, abc=1.3)

@@ -3,7 +3,7 @@ import sys
 
 from pyscf import gto, scf, df
 
-from pythc.methods.thc_df import THCDF
+from pythc.methods.scf import THCDF
 from pythc.thc.ls_snri_cholesky import LS_snRI_Cholesky
 
 logging.basicConfig(
