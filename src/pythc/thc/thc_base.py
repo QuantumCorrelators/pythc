@@ -68,7 +68,6 @@ class ThcEri(ERI):
             f.create_dataset('Z', data=self.Z)
             f.attrs['nelectron'] = self.nelectron
 
-
     def get_X_Z(self):
         return self.X, self.Z
 
@@ -108,6 +107,31 @@ class ThcEriUnrestricted(ERI):
 
     def get_full(self):
         pass
+
+    def save(self, path: str):
+        with h5py.File(path, 'w') as f:
+            f.create_dataset('X_alpha', data=self.X_alpha)
+            f.create_dataset('X_beta', data=self.X_beta)
+            f.create_dataset('Z_aa', data=self.Z_aa)
+            f.create_dataset('Z_bb', data=self.Z_bb)
+            f.create_dataset('Z_ab', data=self.Z_ab)
+            f.attrs['nelectron'] = self.nelectron
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> "ThcEriUnrestricted":
+        """
+        Construct ThcEri directly from an HDF5 file,
+        automatically retrieving nelectron from metadata.
+        """
+        with h5py.File(path, 'r') as f:
+            X_alpha = f['X_alpha'][:]
+            X_beta = f['X_beta'][:]
+            Z_aa = f['Z_aa'][:]
+            Z_bb = f['Z_bb'][:]
+            Z_ab = f['Z_ab'][:]
+            nelectron = f.attrs.get('nelectron', 0)
+
+        return cls(nelectron=int(nelectron), X_alpha=X_alpha, X_beta=X_beta, Z_aa=Z_aa, Z_bb=Z_bb, Z_ab=Z_ab)
 
     def __init__(self, nelectron, X_alpha, X_beta, Z_aa, Z_bb, Z_ab):
         self.nelectron = nelectron

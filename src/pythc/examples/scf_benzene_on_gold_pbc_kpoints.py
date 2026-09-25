@@ -98,7 +98,7 @@ def build_benzene_on_gold_cell() -> gto.Cell:
     """Build the Au(111) slab + flat benzene cell with ASE."""
     from ase.build import fcc111, molecule  # local import: only needed here
 
-    slab = fcc111(
+    slab = fc111(
         "Au",
         size=(INPLANE, INPLANE, N_LAYERS),
         a=AU_LATTICE_A,
