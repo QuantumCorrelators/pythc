@@ -8,7 +8,6 @@ import numpy as np
 import pythc.lib as lib
 from pythc import observe
 from pythc.configurable import Configurable
-from pythc.tracking.experiment_run import ExperimentRun
 
 type Mode = Literal['ao', 'ov', 'oo', 'vv', 'ia']
 

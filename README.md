@@ -106,9 +106,8 @@ From those objects, we can build the THC representation by importing the appropr
 from pythc.thc.ls_ri_becke import LS_RI_Becke
 from pythc.grid import BeckeGrid
 
-grid_builder = BeckeGrid(mol)
-thc_builder = LS_RI_Becke(mol=mol, grid=grid_builder, auxbasis='cc-pvdz-ri')
-thc_eri = thc_builder.build(mode='ao')
+thc = LS_RI_Becke(mol=mol, auxbasis='cc-pvdz-ri')
+thc_eri = thc.build(mode='ao')
 ```
 Supported modes are `ao` for the AO-ERI $(\mu \nu|\lambda \sigma)$ and `ov` for the occupied-virtual block if the MO-ERI $(i j|a b)$.
 The THC representation **must** be built in `mode='ao'` for the HF-SCF calculation.
@@ -158,11 +157,9 @@ from pythc.thc.ls_ri_becke import LS_RI_Becke
 from pythc.methods.scf import THCDF
 
 auxbasis = 'cc-pvdz-ri'
-grid_builder = BeckeGrid(mol)
-thc_builder = LS_RI_Becke(mol=mol, grid=grid_builder, auxbasis=auxbasis)
-thc_eri = thc_builder.build(mode='ao')
+thc = LS_RI_Becke(mol, auxbasis=auxbasis)
 
-mf = scf.RHF(mol).density_fit(with_df=THCDF(mol, thc_eri, auxbasis=auxbasis))
+mf = scf.RHF(mol).density_fit(with_df=THCDF(mol, thc, auxbasis=auxbasis))
 mf.kernel()
 ```
 
@@ -171,7 +168,7 @@ mf.kernel()
 Each of J and K can independently be routed to THC or to conventional DF/RI via the `with_j_thc` / `with_k_thc` flags. In particular `with_j_thc=False` selects "only-K" mode (Coulomb through DF/RI, exchange through THC):
 
 ```python
-mf.with_df = THCDF(mol, thc_eri, auxbasis=auxbasis, with_j_thc=False)
+mf.with_df = THCDF(mol, thc, auxbasis=auxbasis, with_j_thc=False)
 ```
 
 For an exact-DF baseline that switches to the THC density-difference ansatz after the first SCF cycle, use the `THC_RHF` / `THC_UHF` / `THC_GHF` wrappers from `pythc.methods.hf` (same constructor arguments plus the `with_j_thc` / `with_k_thc` flags):
@@ -179,7 +176,7 @@ For an exact-DF baseline that switches to the THC density-difference ansatz afte
 ```python
 from pythc.methods.scfdd import RHF
 
-mf = RHF(mol, thc_eri, auxbasis, verbose=4)
+mf = RHF(mol, thc, auxbasis, verbose=4)
 mf.kernel()
 ```
 
@@ -188,14 +185,10 @@ To calculate a Laplace-transformed MP2 energy contribution with 10 integration p
 ```python
 from pythc.grid import BeckeGrid
 from pythc.thc.ls_ri_becke import LS_RI_Becke
-from pythc.methods.mp2 import LaplaceRMP2
+from pythc.methods.mp2 import LaplaceMP2
 
-grid_builder = BeckeGrid(mol)
-thc_builder = LS_RI_Becke(mol=mol, mo_coeff=mf.mo_coeff, grid=grid_builder,
-                          auxbasis='cc-pvdz-ri')
-thc_eri = thc_builder.build(mode='ov')
-
-mp2_e_thc = LaplaceRMP2(mol, mf, thc_eri, n_laplace=10).kernel()
+thc = LS_RI_Becke(mol, mo_coeff=mf.mo_coeff, auxbasis='cc-pvdz-ri')
+mp2_e_thc = LaplaceRMP2(mf, thc, n_laplace=10).kernel()
 ```
 
 The THC representation **must** be built in `mode='ov'` for the MP2 calculation.
