@@ -1,5 +1,8 @@
+from typing import Optional
+
 import numpy as np
 from pyscf import lib as pyscflib
+from pyscf.pbc import gto
 from pyscf.pbc.df.aft import _check_kpts
 from pyscf.pbc.df.df_jk import _ewald_exxdiv_for_G0, _format_dms, _format_jks, _format_kpts_band
 from pyscf.pbc.df.fft import FFTDF
@@ -7,10 +10,44 @@ from pyscf.pbc.df.fft_jk import get_j_kpts
 from pyscf.pbc.lib.kpts_helper import is_zero
 
 from pythc.pbc.lib import get_supercell_phase, kpt_to_spc, spc_to_kpt
-from pythc.pbc.thc.thc_base import ThcEri
+from pythc.pbc.thc.thc_base import THC_ERI_kpts, THC
 
+class PBC_THC_DF(FFTDF):
+    """
+    Periodic Boundary Condition Density Fitting driver using THC/ISDF representations.
+    """
 
-def get_k_kpts(dfo, dm_kpts, hermi=1, kpts=np.zeros((1, 3)), kpts_band=None, exxdiv=None):
+    def __init__(self, cell: gto.Cell, thc: THC, kpts = None, k_mesh = None):
+        super().__init__(cell, kpts=kpts)
+        self.thc = thc
+        self.k_mesh = k_mesh if k_mesh else [1,1,1]
+        self.kpts = kpts if kpts is not None else cell.make_kpts(k_mesh)
+        self.eri: Optional[THC_ERI_kpts] = None
+
+    def build(self):
+        if self.eri is None:
+            self.eri = self.thc.build_kpts(mode="ao", kpts=self.kpts)
+
+        return self
+
+def get_jk(self, dm, hermi=1, kpts=None, kpts_band=None,
+               with_j=True, with_k=True, omega=None, exxdiv=None):
+        assert omega is None
+        kpts, is_single_kpt = _check_kpts(self, kpts)
+
+        vj = vk = None
+        if with_k:
+            vk = get_k_kpts(self, dm, hermi, kpts, kpts_band, exxdiv)
+
+        if with_j:
+            vj = get_j_kpts(self, dm, hermi, kpts, kpts_band)
+
+        return vj, vk
+
+# Alias for backward compatibility
+Yang_FFTISDF = PBC_THC_DF
+
+def get_k_kpts(dfo: PBC_THC_DF, dm_kpts, hermi=1, kpts=np.zeros((1, 3)), kpts_band=None, exxdiv=None):
     """
     Compute PBC Hartree-Fock exchange matrix V_K for k-points using THC/ISDF tensors.
 
@@ -25,6 +62,11 @@ def get_k_kpts(dfo, dm_kpts, hermi=1, kpts=np.zeros((1, 3)), kpts_band=None, exx
     Returns:
         vk_kpts: Exchange potential matrix in AO basis.
     """
+    if dfo.eri is None:
+        dfo.build()
+
+    X_kpt, Z_kpt = dfo.eri.get_X_Z()
+
     cell = dfo.cell
     assert cell.low_dim_ft_type != 'inf_vacuum'
     assert cell.dimension == 3
@@ -49,8 +91,6 @@ def get_k_kpts(dfo, dm_kpts, hermi=1, kpts=np.zeros((1, 3)), kpts_band=None, exx
             "THCHybridRKS/THCHybridKRKS.get_jk fallback)."
         )
 
-    X_kpt = dfo.X_kpt  # (nkpt, nip, nao)
-    Z_kpt = dfo.Z_kpt  # (nkpt, nip, nip)
     n_grid = X_kpt.shape[1]
 
     # Supercell Coulomb kernel
@@ -87,35 +127,3 @@ def get_k_kpts(dfo, dm_kpts, hermi=1, kpts=np.zeros((1, 3)), kpts_band=None, exx
     return _format_jks(vk_kpts, dm_kpts, input_band, kpts)
 
 
-class PBC_THC_DF(FFTDF):
-    """
-    Periodic Boundary Condition Density Fitting driver using THC/ISDF representations.
-    """
-
-    def __init__(self, cell, kpts, k_mesh=None, thc_eri: ThcEri = None):
-        super().__init__(cell, kpts=kpts)
-        self.thc_eri = thc_eri
-        self.k_mesh = k_mesh
-        if thc_eri is not None:
-            self.X_kpt, self.Z_kpt = thc_eri.get_X_Z()
-        else:
-            self.X_kpt = None
-            self.Z_kpt = None
-
-    def get_jk(self, dm, hermi=1, kpts=None, kpts_band=None,
-               with_j=True, with_k=True, omega=None, exxdiv=None):
-        assert omega is None
-        kpts, is_single_kpt = _check_kpts(self, kpts)
-
-        vj = vk = None
-        if with_k:
-            vk = get_k_kpts(self, dm, hermi, kpts, kpts_band, exxdiv)
-
-        if with_j:
-            vj = get_j_kpts(self, dm, hermi, kpts, kpts_band)
-
-        return vj, vk
-
-
-# Alias for backward compatibility
-Yang_FFTISDF = PBC_THC_DF

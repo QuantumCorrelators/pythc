@@ -21,21 +21,34 @@ What it does
 ------------
 1. Builds the slab + benzene cell with ASE.
 2. Runs a reference periodic HF calculation (``KRHF`` + default FFTDF,
-   ``exxdiv='ewald'``) on the ``3 x 3 x 1`` k-mesh and times it.
+   ``exxdiv='ewald'``) on the configured k-mesh and times it.
 3. Builds the periodic THC/ISDF ERI (``PBC_LS_RI_Cholesky.build_kpts``,
    ``mode='ao'``) and times it.
 4. Runs ``KRHF`` with ``PBC_THC_DF`` (FFT Coulomb + THC exchange) and times it.
-5. Prints an energy/timing comparison table.
+5. Plots a reference-vs-THC total DOS comparison.
+6. Prints an energy/timing comparison table.
 
-Cost control
-------------
-The FFT (uniform) grid grows with ``ke_cutoff`` and the vacuum thickness.
-The defaults (``KE_CUTOFF = 20`` Ry, 2 Au layers, 10 A vacuum) match the
-resolution of the existing ``scf_with_pbc_kpoints_ls_ri_cholesky.py`` Si
-example and keep the demo tractable. Production numbers need a converged
-``ke_cutoff`` (typically >> 100 Ry for Au MOLOPT), more Au layers, and
-k-mesh/vacuum convergence tests. Tune via the module-level constants or
-the ``PYTHC_BENZENE_AU_*`` environment variables.
+Cost control / presets
+-----------------------
+The FFT (uniform) grid grows with ``ke_cutoff`` and the vacuum thickness, and
+the SCF/THC cost grows steeply with the number of k-points and Au atoms. Two
+presets are provided via ``PYTHC_BENZENE_AU_PRESET`` (default ``full``):
+
+- ``full``: ``3x3x1`` in-plane repetition, ``3x3x1`` k-mesh, ``ke_cutoff=20``
+  Ry. This is the physically meaningful (if still under-converged) surface
+  calculation, intended for HPC. Production numbers need a converged
+  ``ke_cutoff`` (typically >> 100 Ry for Au MOLOPT), more Au layers, and
+  k-mesh/vacuum convergence tests.
+- ``quick``: ``1x1x1`` in-plane repetition, Gamma-point-only (``1x1x1``) k-mesh, ``ke_cutoff=10`` Ry, looser Cholesky threshold. Not physically
+  meaningful, but exercises the exact same code path (cell build, reference
+  KRHF, THC build, THC-KRHF, DOS plot) in seconds/minutes on a laptop, e.g.
+  to smoke-test a change before submitting the ``full`` run on HPC::
+
+      PYTHC_BENZENE_AU_PRESET=quick python scf_benzene_on_gold_pbc_kpoints.py
+
+Any individual ``PYTHC_BENZENE_AU_*`` environment variable overrides its
+preset's value, so you can also start from ``quick`` and bump e.g. just the
+k-mesh.
 
 Reference: PyTHC PBC implementation (``pythc.pbc.thc.pbc_ls_ri_cholesky``,
 ``pythc.pbc.scf.df.PBC_THC_DF``) vs. stock PySCF PBC SCF.
@@ -52,25 +65,58 @@ import numpy as np
 from pyscf.pbc import gto, scf
 from pyscf.pbc.tools import pyscf_ase
 
-from pythc.pbc.scf.df import PBC_THC_DF
+from pythc.pbc.scf.scf import PBC_THC_DF
 from pythc.pbc.thc.pbc_ls_ri_cholesky import PBC_LS_RI_Cholesky
 
 # ---------------------------------------------------------------------------
 # Config (overridable via environment for quick tests)
 # ---------------------------------------------------------------------------
-K_MESH = [3, 3, 1]  # required: 3 x 3 x 1 surface sampling
+# PYTHC_BENZENE_AU_PRESET selects a bundle of defaults ("full" = HPC-scale,
+# "quick" = laptop smoke test); any individual PYTHC_BENZENE_AU_* var below
+# still overrides its preset's value.
+_PRESETS = {
+    "full": {
+        "KE_CUTOFF": "20",       # Ry
+        "N_LAYERS": "1",         # Au(111) layers
+        "INPLANE": "3",          # NxN in-plane repetition
+        "VACUUM": "10.0",        # Angstrom
+        "K_MESH": "3,3,1",
+        "CHOLESKY_THRESHOLD": "1e-6",
+    },
+    "quick": {
+        "KE_CUTOFF": "10",
+        "N_LAYERS": "1",
+        "INPLANE": "2",
+        "VACUUM": "8.0",
+        "K_MESH": "1,1,1",       # Gamma point only
+        "CHOLESKY_THRESHOLD": "1e-4",
+    },
+}
+PRESET = os.environ.get("PYTHC_BENZENE_AU_PRESET", "quick")
+if PRESET not in _PRESETS:
+    raise ValueError(f"PYTHC_BENZENE_AU_PRESET={PRESET!r} must be one of {sorted(_PRESETS)}")
+_defaults = _PRESETS[PRESET]
+
 BASIS = "gth-dzvp-molopt-sr"  # double-zeta GTH (MOLOPT-SR; supports Au/C/H)
 PSEUDO = "gth-pade"
-KE_CUTOFF = float(os.environ.get("PYTHC_BENZENE_AU_KE_CUTOFF", "20"))  # Ry
-N_LAYERS = int(os.environ.get("PYTHC_BENZENE_AU_LAYERS", "2"))  # Au(111) layers
-INPLANE = int(os.environ.get("PYTHC_BENZENE_AU_INPLANE", "2"))  # NxN repetition
-VACUUM = float(os.environ.get("PYTHC_BENZENE_AU_VACUUM", "10.0"))  # Angstrom
+KE_CUTOFF = float(os.environ.get("PYTHC_BENZENE_AU_KE_CUTOFF", _defaults["KE_CUTOFF"]))  # Ry
+N_LAYERS = int(os.environ.get("PYTHC_BENZENE_AU_LAYERS", _defaults["N_LAYERS"]))  # Au(111) layers
+INPLANE = int(os.environ.get("PYTHC_BENZENE_AU_INPLANE", _defaults["INPLANE"]))  # NxN repetition
+VACUUM = float(os.environ.get("PYTHC_BENZENE_AU_VACUUM", _defaults["VACUUM"]))  # Angstrom
+K_MESH = [int(x) for x in os.environ.get("PYTHC_BENZENE_AU_KMESH", _defaults["K_MESH"]).split(",")]
 AU_LATTICE_A = 4.0782  # Angstrom, bulk Au lattice constant
 BENZENE_HEIGHT = 3.3  # Angstrom above the top Au layer
-CHOLESKY_THRESHOLD = 1e-6
+CHOLESKY_THRESHOLD = float(
+    os.environ.get("PYTHC_BENZENE_AU_CHOLESKY_THRESHOLD", _defaults["CHOLESKY_THRESHOLD"])
+)
 SMEARING_SIGMA = 0.01  # Ha, Fermi smearing for the metallic slab
+DOS_SIGMA_EV = float(os.environ.get("PYTHC_BENZENE_AU_DOS_SIGMA_EV", "0.2"))  # Gaussian broadening
+DOS_WINDOW_EV = float(os.environ.get("PYTHC_BENZENE_AU_DOS_WINDOW_EV", "20.0"))  # +/- around E_F
+DOS_NPTS = int(os.environ.get("PYTHC_BENZENE_AU_DOS_NPTS", "2000"))
+DOS_PLOT_PATH = os.environ.get("PYTHC_BENZENE_AU_DOS_PLOT", "dos_comparison.png")
 
 HARTREE_TO_MEV = 27_211.386_245_988
+HARTREE_TO_EV = HARTREE_TO_MEV / 1000.0
 HARTREE_TO_KCALMOL = 627.509_474
 
 logging.basicConfig(
@@ -98,7 +144,7 @@ def build_benzene_on_gold_cell() -> gto.Cell:
     """Build the Au(111) slab + flat benzene cell with ASE."""
     from ase.build import fcc111, molecule  # local import: only needed here
 
-    slab = fc111(
+    slab = fcc111(
         "Au",
         size=(INPLANE, INPLANE, N_LAYERS),
         a=AU_LATTICE_A,
@@ -129,6 +175,54 @@ def build_benzene_on_gold_cell() -> gto.Cell:
     return cell
 
 
+def compute_dos(
+    mf, sigma_eV: float = DOS_SIGMA_EV, window_eV: float = DOS_WINDOW_EV, npts: int = DOS_NPTS
+) -> tuple[np.ndarray, np.ndarray]:
+    """Gaussian-broadened total DOS from a converged KRHF object, referenced to E_F.
+
+    Sums mo_energy over all k-points (equal Monkhorst-Pack weights) and normalizes
+    by nkpts, so the result is "states per eV per unit cell". Includes the RHF spin
+    degeneracy of 2 per orbital.
+    """
+    fermi_eV = mf.get_fermi() * HARTREE_TO_EV
+    energies_eV = np.concatenate([np.asarray(e) for e in mf.mo_energy]) * HARTREE_TO_EV - fermi_eV
+    nkpts = len(mf.mo_energy)
+
+    egrid_eV = np.linspace(-window_eV, window_eV, npts)
+    diff = egrid_eV[:, None] - energies_eV[None, :]
+    gaussians = np.exp(-0.5 * (diff / sigma_eV) ** 2) / (sigma_eV * np.sqrt(2.0 * np.pi))
+    spin_degeneracy = 2.0
+    dos = spin_degeneracy * gaussians.sum(axis=1) / nkpts
+    return egrid_eV, dos
+
+
+def plot_dos_comparison(
+    mf_ref, mf_thc, out_path: str = DOS_PLOT_PATH,
+    sigma_eV: float = DOS_SIGMA_EV, window_eV: float = DOS_WINDOW_EV, npts: int = DOS_NPTS,
+) -> str:
+    """Overlay reference (FFTDF) vs. THC total DOS, both referenced to their own E_F."""
+    import matplotlib.pyplot as plt  # local import: optional dependency, only needed here
+
+    e_ref, dos_ref = compute_dos(mf_ref, sigma_eV, window_eV, npts)
+    e_thc, dos_thc = compute_dos(mf_thc, sigma_eV, window_eV, npts)
+
+    fig, ax = plt.subplots(figsize=(6, 4.5))
+    ax.plot(e_ref, dos_ref, color="black", label="reference (FFTDF)")
+    ax.plot(e_thc, dos_thc, color="tab:blue", linestyle="--", label="THC")
+    ax.axvline(0.0, color="gray", linestyle=":", linewidth=1)
+    ax.set_xlabel("E - E_F (eV)")
+    ax.set_ylabel(f"DOS (states/eV, sigma={sigma_eV:g} eV)")
+    ax.set_xlim(-window_eV, window_eV)
+    ax.legend()
+    kmesh_str = "x".join(str(k) for k in K_MESH)
+    ax.set_title(f"benzene/Au(111) {kmesh_str} ({PRESET}): total DOS, reference vs. THC")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    logger.info("DOS comparison plot written to %s", out_path)
+    return out_path
+
+
 def run_krhf(cell: gto.Cell, kpts: np.ndarray, with_df=None, label: str = "KRHF") -> tuple:
     """Run periodic RHF on the given k-mesh, optionally with a custom DF object."""
     mf = scf.KRHF(cell, kpts=kpts)
@@ -149,6 +243,11 @@ def run_krhf(cell: gto.Cell, kpts: np.ndarray, with_df=None, label: str = "KRHF"
 def main() -> dict:
     timings: dict = {}
 
+    logger.info(
+        "preset=%s ke_cutoff=%.1f Ry inplane=%d layers=%d vacuum=%.1f A k_mesh=%s "
+        "cholesky_threshold=%.1e",
+        PRESET, KE_CUTOFF, INPLANE, N_LAYERS, VACUUM, K_MESH, CHOLESKY_THRESHOLD,
+    )
     with timed_step("Cell construction (benzene/Au(111))", timings, "cell"):
         cell = build_benzene_on_gold_cell()
     kpts = cell.make_kpts(K_MESH)
@@ -159,21 +258,24 @@ def main() -> dict:
         mf_ref, e_ref = run_krhf(cell, kpts, label="Reference KRHF")
 
     # 2. THC factorization of the periodic ERIs (AO mode for SCF).
-    with timed_step("THC build_kpts (PBC LS-RI-Cholesky, mode='ao')", timings, "thc_build"):
-        thc = PBC_LS_RI_Cholesky(cell=cell, cholesky_threshold=CHOLESKY_THRESHOLD)
-        thc_eri = thc.build_kpts(mode="ao", kpts=kpts)
-    X_kpt, Z_kpt = thc_eri.get_X_Z()
-    logger.info("THC shapes: X=%s Z=%s (ngrid=%d)", X_kpt.shape, Z_kpt.shape, int(np.prod(cell.mesh)))
+    thc = PBC_LS_RI_Cholesky(cell=cell, cholesky_threshold=CHOLESKY_THRESHOLD)
+    thc_df = PBC_THC_DF(cell, thc, kpts, K_MESH)
+    with timed_step("THC/ISDF ERI build", timings, "thc_build"):
+        thc_df.build()
 
     # 3. THC SCF: FFT Coulomb + THC exchange via PBC_THC_DF.
     with timed_step("THC-KRHF (PBC_THC_DF)", timings, "thc_scf"):
-        thc_df = PBC_THC_DF(cell, kpts, K_MESH, thc_eri)
         mf_thc, e_thc = run_krhf(cell, kpts, with_df=thc_df, label="THC-KRHF")
 
-    # 4. Comparison.
+    # 4. DOS diagnostic: reference vs. THC, both referenced to their own E_F.
+    with timed_step("DOS comparison plot", timings, "dos_plot"):
+        dos_path = plot_dos_comparison(mf_ref, mf_thc)
+
+    # 5. Comparison.
     d_e = e_thc - e_ref
     total_thc = timings["thc_build"] + timings["thc_scf"]
-    print("\n================ benzene/Au(111) 3x3x1 comparison ================")
+    kmesh_str = "x".join(str(k) for k in K_MESH)
+    print(f"\n================ benzene/Au(111) {kmesh_str} comparison ({PRESET}) ================")
     print(f"basis={BASIS}  pseudo={PSEUDO}  ke_cutoff={KE_CUTOFF} Ry")
     print(f"slab={INPLANE}x{INPLANE}x{N_LAYERS} Au + C6H6  nao={cell.nao_nr()}  nkpts={len(kpts)}")
     print(f"reference KRHF energy : {e_ref:.10f} Ha  ({timings['ref_scf']:.1f} s)")

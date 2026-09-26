@@ -10,7 +10,7 @@ from pyscf import lib
 from pyscf.pbc import gto, scf
 
 # 2. Import your existing MP2 logic and the NEW PBC THC class
-from pythc.pbc.scf.df import Yang_FFTISDF
+from pythc.pbc.scf.scf import Yang_FFTISDF
 from pythc.pbc.thc.pbc_ls_ri_cholesky import PBC_LS_RI_Cholesky
 
 KCALPERMOL_PER_HARTREE = 627.509_474
@@ -92,7 +92,7 @@ def main():
         mf_thc.kernel()
 
     print(f"MF-THC energy: {mf_thc.e_tot*KCALPERMOL_PER_HARTREE}")
-    print(f"THC Z shape: {thc_eri.Z.shape}")
+    print(f"THC Z shape: {thc_eri.Z_kpts.shape}")
     print(f"Error Me vs. RI: {(mf.e_tot - mf_thc.e_tot)*KCALPERMOL_PER_HARTREE}")
 
     total_elapsed = perf_counter() - total_start

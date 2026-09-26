@@ -1,6 +1,5 @@
 from abc import abstractmethod, ABC
 from pathlib import Path
-from typing import Literal
 
 import h5py
 import numpy as np
@@ -8,48 +7,21 @@ import numpy as np
 import pythc.lib as lib
 from pythc import observe
 from pythc.configurable import Configurable
-
-type Mode = Literal['ao', 'ov', 'oo', 'vv', 'ia']
-
-
-class ERI(ABC):
-    """
-    Interface for a generic Electron Repulsion Integral
-    """
-
-    @abstractmethod
-    def get_full(self):
-        """
-        Get full 4-dimensional <ab|cd> representation of the integral
-        :return: <ab|cd>
-        """
-        pass
-
-    @abstractmethod
-    def get_jk(self) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Get J = <ab|cd> and K = <ad|cb> representations of the integral
-        :return: <ab|cd>, <ad|cb>
-        """
-        pass
-
-    @abstractmethod
-    def to_backend(self):
-        pass
+from pythc.thc.thc_base import Mode, ERI
 
 
-class ThcEri(ERI):
-    def __init__(self, nelectron: int, X: np.ndarray, Z: np.ndarray, D: np.ndarray = None):
+class THC_ERI_kpts(ERI):
+    def __init__(self, nelectron: int, X_kpts: np.ndarray, Z_kpts: np.ndarray, D_kpts: np.ndarray = None):
         self.nelectron = nelectron
-        self.X = X  # (N^2, M)
-        self.Z = Z  # (M, M)
-        self.D = D # (M, n_aux)
+        self.X_kpts = X_kpts  # (k, N^2, M)
+        self.Z_kpts = Z_kpts  # (k, M, M)
+        self.D_kpts = D_kpts # (k, M, n_aux)
 
-        observe.log_metric("n_thc", int(X.shape[0]))
+        observe.log_metric("n_thc", int(X_kpts.shape[0]))
 
 
     @classmethod
-    def from_file(cls, path: str | Path) -> "ThcEri":
+    def from_file(cls, path: str | Path) -> "THC_ERI_kpts":
         """
         Construct ThcEri directly from an HDF5 file,
         automatically retrieving nelectron from metadata.
@@ -59,74 +31,44 @@ class ThcEri(ERI):
             Z = f['Z'][:]
             nelectron = f.attrs.get('nelectron', 0)
 
-        return cls(nelectron=int(nelectron), X=X, Z=Z)
+        return cls(nelectron=int(nelectron), X_kpts=X, Z_kpts=Z)
 
 
     def save(self, path: str):
         with h5py.File(path, 'w') as f:
-            f.create_dataset('X', data=self.X)
-            f.create_dataset('Z', data=self.Z)
+            f.create_dataset('X', data=self.X_kpts)
+            f.create_dataset('Z', data=self.Z_kpts)
             f.attrs['nelectron'] = self.nelectron
 
 
     def get_X_Z(self):
-        return self.X, self.Z
+        return self.X_kpts, self.Z_kpts
 
     def get_D(self):
-        return self.D
+        return self.D_kpts
 
     def get_full(self):
-        N = self.X.shape[1]
-        Xs = lib.einsum("pn,pm->mnp", self.X, self.X).reshape(N ** 2, -1)
-        return Xs @ self.Z @ Xs.T
+        N = self.X_kpts.shape[1]
+        Xs = lib.einsum("pn,pm->mnp", self.X_kpts, self.X_kpts).reshape(N ** 2, -1)
+        return Xs @ self.Z_kpts @ Xs.T
 
     def get_jk(self):
         nocc = self.nelectron // 2
         o = slice(None, nocc)
         v = slice(nocc, None)
 
-        X_o = self.X[:, o]
-        X_v = self.X[:, v]
+        X_o = self.X_kpts[:, o]
+        X_v = self.X_kpts[:, v]
 
         X_ai = lib.einsum("pi,pa->iap", X_o, X_v)
 
-        J = lib.einsum("iap,pq,jbq->ijab", X_ai, self.Z, X_ai)
+        J = lib.einsum("iap,pq,jbq->ijab", X_ai, self.Z_kpts, X_ai)
 
         return J, J.swapaxes(2, 3)
 
     def to_backend(self):
-        self.X = lib.to_backend(self.X)
-        self.Z = lib.to_backend(self.Z)
-
-
-class ThcEriUnrestricted(ERI):
-    def get_X_Z(self):
-        return self.X_alpha, self.X_beta, self.Z_aa, self.Z_bb, self.Z_ab
-
-    def get_jk(self) -> tuple[np.ndarray, np.ndarray]:
-        pass
-
-    def get_full(self):
-        pass
-
-    def __init__(self, nelectron, X_alpha, X_beta, Z_aa, Z_bb, Z_ab):
-        self.nelectron = nelectron
-        self.X_alpha = X_alpha
-        self.X_beta = X_beta
-        self.Z_aa = Z_aa
-        self.Z_bb = Z_bb
-        self.Z_ab = Z_ab
-
-        X_a_len = X_alpha.shape[0]
-        X_b_len = X_beta.shape[0]
-        observe.log_metric("n_thc", int(max(X_a_len, X_b_len)))
-
-    def to_backend(self):
-        self.X_alpha = lib.to_backend(self.X_alpha)
-        self.X_beta = lib.to_backend(self.X_beta)
-        self.Z_aa = lib.to_backend(self.Z_aa)
-        self.Z_bb = lib.to_backend(self.Z_bb)
-        self.Z_ab = lib.to_backend(self.Z_ab)
+        self.X_kpts = lib.to_backend(self.X_kpts)
+        self.Z_kpts = lib.to_backend(self.Z_kpts)
 
 
 class THC(ABC, Configurable):
@@ -134,9 +76,5 @@ class THC(ABC, Configurable):
         self.mo_coeff = mo_coeff
 
     @abstractmethod
-    def build(self) -> ThcEri:
-        pass
-
-    @abstractmethod
-    def build_unrestricted(self) -> ThcEriUnrestricted:
+    def build_kpts(self, mode: Mode = "ao") -> THC_ERI_kpts:
         pass

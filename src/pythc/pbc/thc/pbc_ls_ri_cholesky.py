@@ -7,10 +7,9 @@ from pyscf.pbc import tools as pbctools
 from pythc.decomp.cholesky import SymMetric, SymMetricOV, AccelRPCholesky, SymMetricPBC
 from pythc.grid import UniformGrid
 from pythc.pbc.lib import get_supercell_phase, contract_fft_k, lstsq_svd
-from pythc.thc.thc_base import THC, Mode, ThcEri, ThcEriUnrestricted
+from pythc.pbc.thc.thc_base import  THC, Mode, THC_ERI_kpts
 
 logger = logging.getLogger()
-
 
 
 class PBC_LS_RI_Cholesky(THC):
@@ -18,10 +17,6 @@ class PBC_LS_RI_Cholesky(THC):
     Periodic Boundary Condition implementation of LS-RI-Cholesky.
     Adapts the FFTISDF pruning strategy for Gamma-point and k-points.
     """
-
-    def build_unrestricted(self) -> ThcEriUnrestricted:
-        pass
-
     def __init__(self, cell: gto.Cell, mo_coeff=None, e_cut: float = 70, cholesky_threshold: float = 1e-10):
         super().__init__()
         self.cell = cell
@@ -30,7 +25,7 @@ class PBC_LS_RI_Cholesky(THC):
         self.cholesky_threshold = cholesky_threshold
         self.grid_builder = UniformGrid(cell, e_cut)
 
-    def build(self, mode: Mode = "ao") -> ThcEri:
+    def build(self, mode: Mode = "ao") -> THC_ERI_kpts:
         logger.info("building PBC LS-RI-Cholesky THC: mode=%s", mode)
         grid = self.grid_builder.build()
         logger.info("built uniform grid: grid=%d", len(grid))
@@ -90,9 +85,9 @@ class PBC_LS_RI_Cholesky(THC):
         Z = Z_T.T
         logger.info("built THC: X=%s, Z=%s", X_pruned.shape, Z.shape)
 
-        return ThcEri(self.cell.nelectron, X_pruned, Z, None)
+        return THC_ERI_kpts(self.cell.nelectron, X_pruned, Z, None)
 
-    def build_kpts(self, mode: Mode = "ao", kpts=None) -> ThcEri:
+    def build_kpts(self, mode: Mode = "ao", kpts=None) -> THC_ERI_kpts:
         mesh = self.cell.mesh
         grid = self.cell.gen_uniform_grids(mesh)
         n_kpt = len(kpts)
@@ -156,40 +151,4 @@ class PBC_LS_RI_Cholesky(THC):
             logger.info("\tk-point %d/%d: Z=%s", q + 1, n_kpt, Z_kpt[q].shape)
 
         logger.info("built k-points THC: X=%s, Z=%s", X_kpt_pruned.shape, Z_kpt.shape)
-        return ThcEri(self.cell.nelectron, X_kpt_pruned, Z_kpt, None)
-
-    def build_unrestricted(self, mode: Mode = "ov") -> ThcEriUnrestricted:
-        """
-        Builds a spin-unrestricted THC representation.
-        Currently only supported in 'ov' mode.
-        """
-        if mode != 'ov':
-            raise NotImplementedError("Unrestricted fitting is only supported in 'ov' mode")
-
-        # ---------------------------------------------------------
-        # 1. SETUP
-        # ---------------------------------------------------------
-        # TODO: Get grid, weights, and evaluate basis X
-
-        # TODO: Transform X for alpha and beta spins separately using mo_coeff[0] and mo_coeff[1]
-
-        # ---------------------------------------------------------
-        # 2. PRUNING
-        # ---------------------------------------------------------
-        # TODO: Perform pruning separately for alpha and beta to get pivots_alpha, pivots_beta
-
-        # ---------------------------------------------------------
-        # 3. METRIC INVERSION
-        # ---------------------------------------------------------
-        # TODO: Form S_pruned and S_cross for alpha and beta
-
-        # TODO: Solve for \Xi_alpha and \Xi_beta
-
-        # ---------------------------------------------------------
-        # 4. COULOMB KERNEL
-        # ---------------------------------------------------------
-        # TODO: Evaluate 3-center integrals
-
-        # TODO: Form Z_aa, Z_bb, and the asymmetric Z_ab
-
-        pass
+        return THC_ERI_kpts(self.cell.nelectron, X_kpt_pruned, Z_kpt, None)

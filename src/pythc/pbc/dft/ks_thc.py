@@ -1,7 +1,7 @@
 import numpy as np
 from pyscf import __config__, pbc
 from pyscf.pbc import dft
-from pythc.pbc.scf.df import get_k_kpts, Yang_FFTISDF
+from pythc.pbc.scf.scf import get_k_kpts, Yang_FFTISDF
 from pythc.pbc.thc.pbc_ls_ri_cholesky import PBC_LS_RI_Cholesky
 
 

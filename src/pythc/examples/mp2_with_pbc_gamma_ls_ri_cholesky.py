@@ -9,7 +9,6 @@ from pyscf.pbc.tools import super_cell
 
 # 2. Import your existing MP2 logic and the NEW PBC THC class
 from pythc.methods.mp2 import mp2_energy_laplace
-from pythc.pbc.thc.ls_ri_cholesky import LS_RI_Cholesky
 from pythc.pbc.thc.pbc_ls_ri_cholesky import PBC_LS_RI_Cholesky
 
 logging.basicConfig(
