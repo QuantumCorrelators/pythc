@@ -152,14 +152,20 @@ class SymMetricPBC(FunctionMatrix):
         AO mode  : (k, |I|, |J|) real array of |d^k_{ij}|²
         OV mode  : (k, |I|, |J|) complex array of d_o^k · conj(d_v^k)
         """
+        # NOTE: this must stay on the BLAS matmul path (``@``), NOT
+        # ``np.einsum('kip,kjp->kij', ...)``. NumPy's default einsum
+        # implementation is a single-threaded C loop that ignores
+        # OPENBLAS_NUM_THREADS/OMP_NUM_THREADS, which serialized the
+        # whole RPCholesky grid-pruning step on one core. Batched
+        # matmul dispatches per-k zgemm/dgemm calls and threads.
         # d_o[k,i,j] = Xi[k,i,:]^H · Xj[k,j,:]
-        d_o = np.einsum('kip,kjp->kij', Xi.conj(), Xj)  # (k, |I|, |J|) complex
+        d_o = Xi.conj() @ Xj.transpose(0, 2, 1)  # (k, |I|, |J|) complex
 
         if Xi_v is None:                  # AO mode  →  |d_o|²  (real)
             return d_o.real ** 2 + d_o.imag ** 2
 
         # OV mode  →  d_o · conj(d_v)   (complex)
-        d_v = np.einsum('kip,kjp->kij', Xi_v.conj(), Xj_v)
+        d_v = Xi_v.conj() @ Xj_v.transpose(0, 2, 1)
         return d_o * d_v.conj()
 
     # ------------------------------------------------------------------
@@ -180,16 +186,20 @@ class SymMetricPBC(FunctionMatrix):
 
     def _function_vec(self, vec_i, vec_j):
         """Return element-wise S[vec_i[r], vec_j[r]] — 1-D array."""
-        # Gather paired rows: (len, k, p) → transpose to (k, len, p)
+        # Paired rows only: computing the full (len×len) block and then
+        # keeping its diagonal would waste O(k·len²) work and memory.
         Xi   = self.X[:, vec_i, :]    # (k, len, p_o)
         Xj   = self.X[:, vec_j, :]
         Xi_v = self.X_v[:, vec_i, :] if self.X_v is not None else None
         Xj_v = self.X_v[:, vec_j, :] if self.X_v is not None else None
 
-        prods = self._inner_products(Xi, Xj, Xi_v, Xj_v)  # (k, len, len)
-        # We only want the r-th diagonal of the (len×len) block for each k,
-        # i.e., prods[k, r, r]  summed over k.
-        return np.einsum('krr->r', prods)
+        d_o = (Xi.conj() * Xj).sum(axis=-1)  # (k, len) complex
+        if Xi_v is None:                     # AO mode → Σ_k |d_o|² (real)
+            return (d_o.real ** 2 + d_o.imag ** 2).sum(axis=0)
+
+        # OV mode → Σ_k d_o · conj(d_v) (complex)
+        d_v = (Xi_v.conj() * Xj_v).sum(axis=-1)
+        return (d_o * d_v.conj()).sum(axis=0)
 
     def _function_mtx(self, vec_i, vec_j):
         """Return submatrix S[vec_i, :][:, vec_j] — shape (|I|, |J|)."""
@@ -198,8 +208,20 @@ class SymMetricPBC(FunctionMatrix):
         Xi_v = self.X_v[:, vec_i, :] if self.X_v is not None else None
         Xj_v = self.X_v[:, vec_j, :] if self.X_v is not None else None
 
-        prods = self._inner_products(Xi, Xj, Xi_v, Xj_v)  # (k, |I|, |J|)
-        return prods.sum(axis=0)                            # (|I|, |J|)
+        # Accumulate per k-point instead of materializing the (k, |I|, |J|)
+        # intermediate: for row blocks (|I| ~ b, |J| = n_grid) that
+        # temporary is k× larger than the result (tens of GB here).
+        # Each per-k ``@`` is a threaded BLAS gemm (see _inner_products).
+        out = np.zeros((len(vec_i), len(vec_j)),
+                       dtype=np.float64 if Xi_v is None else np.complex128)
+        for kk in range(self.k):
+            d_o = Xi[kk].conj() @ Xj[kk].T
+            if Xi_v is None:                  # AO mode → Σ_k |d_o|² (real)
+                out += d_o.real ** 2 + d_o.imag ** 2
+            else:                             # OV mode → Σ_k d_o·conj(d_v)
+                d_v = Xi_v[kk].conj() @ Xj_v[kk].T
+                out += d_o * d_v.conj()
+        return out
 
     def _diag_helper(self, vec=None):
         """Return diagonal elements S[r,r] — cached, always real and ≥ 0."""
