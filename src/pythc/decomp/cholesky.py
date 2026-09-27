@@ -201,26 +201,32 @@ class SymMetricPBC(FunctionMatrix):
         d_v = (Xi_v.conj() * Xj_v).sum(axis=-1)
         return (d_o * d_v.conj()).sum(axis=0)
 
-    def _function_mtx(self, vec_i, vec_j):
+    def _function_mtx(self, vec_i, vec_j, jblock: int = 2048):
         """Return submatrix S[vec_i, :][:, vec_j] — shape (|I|, |J|)."""
         Xi   = self.X[:, vec_i, :]    # (k, |I|, p_o)
-        Xj   = self.X[:, vec_j, :]
         Xi_v = self.X_v[:, vec_i, :] if self.X_v is not None else None
-        Xj_v = self.X_v[:, vec_j, :] if self.X_v is not None else None
 
-        # Accumulate per k-point instead of materializing the (k, |I|, |J|)
-        # intermediate: for row blocks (|I| ~ b, |J| = n_grid) that
-        # temporary is k× larger than the result (tens of GB here).
-        # Each per-k ``@`` is a threaded BLAS gemm (see _inner_products).
-        out = np.zeros((len(vec_i), len(vec_j)),
+        # Block over J and accumulate per k-point instead of materializing
+        # the (k, |I|, |J|) intermediate: for row blocks (|I| ~ b,
+        # |J| = n_grid) that temporary is k× larger than the result
+        # (tens of GB here). Each per-k ``@`` is a threaded BLAS gemm
+        # (see _inner_products). Blocking also keeps every single gemm
+        # output small: one giant multi-GB zgemm segfaulted OpenBLAS
+        # 0.3.34 (pthreads) on 96-core Zen4, while smaller gemms run fine.
+        n_j = len(vec_j)
+        out = np.zeros((len(vec_i), n_j),
                        dtype=np.float64 if Xi_v is None else np.complex128)
-        for kk in range(self.k):
-            d_o = Xi[kk].conj() @ Xj[kk].T
-            if Xi_v is None:                  # AO mode → Σ_k |d_o|² (real)
-                out += d_o.real ** 2 + d_o.imag ** 2
-            else:                             # OV mode → Σ_k d_o·conj(d_v)
-                d_v = Xi_v[kk].conj() @ Xj_v[kk].T
-                out += d_o * d_v.conj()
+        for j0 in range(0, n_j, jblock):
+            js = slice(j0, min(j0 + jblock, n_j))
+            Xjb = self.X[:, vec_j[js], :]
+            Xjb_v = self.X_v[:, vec_j[js], :] if self.X_v is not None else None
+            for kk in range(self.k):
+                d_o = Xi[kk].conj() @ Xjb[kk].T
+                if Xi_v is None:              # AO mode → Σ_k |d_o|² (real)
+                    out[:, js] += d_o.real ** 2 + d_o.imag ** 2
+                else:                         # OV mode → Σ_k d_o·conj(d_v)
+                    d_v = Xi_v[kk].conj() @ Xjb_v[kk].T
+                    out[:, js] += d_o * d_v.conj()
         return out
 
     def _diag_helper(self, vec=None):

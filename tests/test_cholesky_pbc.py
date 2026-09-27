@@ -58,6 +58,21 @@ def test_function_mtx_matches_reference(pbc_metric):
     np.testing.assert_allclose(got, expected, rtol=1e-12, atol=1e-12)
 
 
+def test_function_mtx_blocking_consistent(pbc_metric):
+    """J-blocking must not change results (any block size / index type)."""
+    metric, X, X_v = pbc_metric
+    rng = np.random.default_rng(4)
+    n = X.shape[1]
+    vec_i = rng.choice(n, size=9, replace=False)
+    vec_j = rng.choice(n, size=13, replace=False)
+    expected = _reference_mtx(X, X_v, vec_i, vec_j)
+    for jb in (1, 4, 5, 100):
+        got = metric._function_mtx(list(vec_i), list(vec_j), jblock=jb)
+        np.testing.assert_allclose(got, expected, rtol=1e-12, atol=1e-12)
+        got = metric._function_mtx(np.asarray(vec_i), np.asarray(vec_j), jblock=jb)
+        np.testing.assert_allclose(got, expected, rtol=1e-12, atol=1e-12)
+
+
 def test_function_vec_matches_paired_reference(pbc_metric):
     metric, X, X_v = pbc_metric
     rng = np.random.default_rng(2)
