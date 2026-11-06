@@ -11,12 +11,11 @@ from pyscf.gw.gw_ac import _get_scaled_legendre_roots
 from pyscf.scf.hf import SCF
 
 import pythc.lib as lib
-from pythc import const
+from pythc._tracking import observe
 from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
 from pythc.thc.ls_snri_cholesky import LS_snRI_Cholesky
 from pythc.thc.thc_base import ERI, THC_ERI, THC
 from pythc.thc.thc_base import THC_ERI_Unrestricted
-from pythc._tracking import observe
 
 if lib.has_cuda_gpu():
     import cupy as xp
