@@ -38,7 +38,7 @@ def main():
     mp2_ref = DFMP2(mf).kernel()[0]
     print(f'MP2 RI Reference: {mp2_ref}')
 
-    mp2e = LaplaceMP2(mf, thc)
+    mp2e = LaplaceMP2(mf, thc).kernel()
     print(f'MP2 E corr: {mp2e}')
 
 if __name__ == '__main__':

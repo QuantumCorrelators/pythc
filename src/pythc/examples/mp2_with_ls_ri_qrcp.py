@@ -4,7 +4,7 @@ import sys
 from pyscf import gto, scf
 from pyscf.mp.dfmp2 import DFMP2
 
-from pythc.methods.mp2 import mp2_energy_laplace, LaplaceMP2
+from pythc.methods.mp2 import LaplaceMP2
 from pythc.thc.ls_ri_qrcp import LS_RI_QRCP
 
 logging.basicConfig(
