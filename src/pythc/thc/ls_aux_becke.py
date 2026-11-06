@@ -4,15 +4,16 @@ from typing import Any, Type
 import numpy as np
 import scipy
 from pyscf import df, gto
+from pyscf.lib.exceptions import BasisNotFoundError
 from scipy.linalg.lapack import dpstrf
 
 from pythc.decomp.cholesky import Cholesky, AccelRPCholesky, GramMetric
 from pythc.grid import GridProvider, BeckeGrid
 from pythc.thc.checkpoints import GRID_BUILD, BASIS_FUNCTION_EVAL, GRID_PRUNING, FITTING_MATRIX
 from pythc.thc.ls_thc_funcs import eval_basefuncs
-from pythc.thc.thc_base import THC, ThcEri, ERI, Mode
-from pythc.thc.thc_base import ThcEriUnrestricted
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc.thc.thc_base import THC, THC_ERI, ERI, Mode
+from pythc.thc.thc_base import THC_ERI_Unrestricted
+from tracking import observe
 
 logger = logging.getLogger()
 
@@ -31,17 +32,26 @@ class LS_Aux_Becke(THC):
                  mol: gto.Mole,
                  grid: GridProvider = None,
                  mo_coeff: np.ndarray = None,
-                 cholesky_decomp: Type[Cholesky] = AccelRPCholesky,
+                 cholesky_decomp: Cholesky | Type[Cholesky] = AccelRPCholesky,
                  cholesky_threshold: float = 1e-8,
                  fit_auxbasis: str = None,
                  auxbasis: str = None,
                  regularization: float = 1e-6,
                  level=0,
+                 seed: int | None = None,
                  ):
         self.N = mol.nao_nr()
         self.mol = mol
         self.grid = grid if grid else BeckeGrid(mol, level=level)
-        self.cholesky_decomp = cholesky_decomp()
+        if isinstance(cholesky_decomp, Cholesky):
+            if seed is not None and getattr(cholesky_decomp, "seed", None) != seed:
+                logger.warning("ignoring THC seed=%r: pre-configured cholesky_decomp wins", seed)
+            self.cholesky_decomp = cholesky_decomp
+        else:
+            self.cholesky_decomp = cholesky_decomp()
+            if seed is not None:
+                # Honored by AccelRPCholesky (default); reproducible grid pruning.
+                self.cholesky_decomp.seed = seed
         self.cholesky_threshold = cholesky_threshold
         self.regularization = regularization
 
@@ -49,6 +59,18 @@ class LS_Aux_Becke(THC):
         if isinstance(fit_auxbasis, str) and "etb" in fit_auxbasis:
             beta = float(fit_auxbasis.split("-")[1])
             self.fit_auxbasis = df.aug_etb(mol, beta=beta)
+        elif isinstance(fit_auxbasis, str) and ("jkfit" in fit_auxbasis or fit_auxbasis.endswith("-ri")):
+            # A genuine fitting basis: use verbatim instead of building an
+            # orbital basis out of it. Dunning fitting sets do not cover ECP
+            # elements, so fall back to a universal jkfit fit (same fit
+            # family, covers up to I and beyond) when incomplete.
+            try:
+                df.addons.make_auxmol(mol, auxbasis=fit_auxbasis)
+                self.fit_auxbasis = fit_auxbasis
+            except BasisNotFoundError:
+                logger.warning("fit basis %s incomplete for this molecule; "
+                               "falling back to def2-universal-jkfit", fit_auxbasis)
+                self.fit_auxbasis = "def2-universal-jkfit"
         elif fit_auxbasis:
             m = gto.Mole()
             m.atom = mol.atom
@@ -60,7 +82,7 @@ class LS_Aux_Becke(THC):
             }
             for el in HEAVY_ELEMENTS:
                 basis[el] = fit_auxbasis + '-pp'
-            logger.info(f'using fit auxbasis: {basis}')
+            logger.info("using fit auxbasis: %s", basis)
 
             m.basis = basis
             m.ecp = mol.ecp
@@ -70,7 +92,7 @@ class LS_Aux_Becke(THC):
         else:
             self.fit_auxbasis = df.make_auxbasis(mol, mp2fit=True)
 
-        logger.info(f"build fit auxbasis: {str(self.fit_auxbasis)[:100]}")
+        logger.info("built fit auxbasis: n_aux=%d", self.fit_auxbasis.nao_nr() if hasattr(self.fit_auxbasis, "nao_nr") else -1)
         self.mo_coeff = mo_coeff if mo_coeff is not None and len(mo_coeff) > 0 else np.eye(mol.nao_nr())
 
 
@@ -93,25 +115,26 @@ class LS_Aux_Becke(THC):
         3. Compute the Coulomb kernel matrix directly as Z = Y.T @ Y.
 
         Returns:
-            ThcEri: Dataclass containing the number of electrons, collocation matrix (X),
+            THC_ERI: Dataclass containing the number of electrons, collocation matrix (X),
                     and the Coulomb kernel (Z).
         """
-        active: ExperimentRun = ExperimentRun.get_active()
         auxmol = self.build_auxmol()
-        if active: active.log_metric("fit_auxbasis_size", auxmol.nao_nr())
+        observe.log_metric("fit_auxbasis_size", auxmol.nao_nr())
+        logger.info("building LS-Aux-Becke THC: mode=%s, n_fit_aux=%d", mode, auxmol.nao_nr())
 
-
-        logger.info("evaluating basis functions on grid")
         Xaux_pruned, X_pruned = self.get_pruned_grid(mode, auxmol)
 
         D = self.build_D(Xaux_pruned, auxmol)
         Z = D.T @ D
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
 
         logger.info(f"built THC with Z: {Z.shape}, X: {X_pruned.shape}")
-        return ThcEri(self.mol.nelectron, X_pruned, Z, D)
+        # Store D transposed so its rows match the grid points (M, N), the
+        # same convention as LS_RI_THC/LS_RI_Cholesky/LS_snRI_Cholesky
+        # (the only consumer, methods.rpa.thc_rpa, requires D rows == X rows).
+        return THC_ERI(self.mol.nelectron, X_pruned, Z, D.T)
 
-    def build_unrestricted(self, mode: Mode = "ao") -> ThcEriUnrestricted:
+    def build_unrestricted(self, mode: Mode = "ao") -> THC_ERI_Unrestricted:
         """
         Builds a spin-unrestricted LS-Aux-Becke representation.
 
@@ -125,7 +148,7 @@ class LS_Aux_Becke(THC):
            (In this approximation, the kernel is spin-independent, so Z_aa = Z_bb = Z_ab = Z).
 
         Returns:
-            ThcEriUnrestricted: Dataclass containing the number of electrons, spin-specific
+            THC_ERI_Unrestricted: Dataclass containing the number of electrons, spin-specific
                                 collocation matrices, and the shared Coulomb kernels.
 
         Raises:
@@ -134,26 +157,28 @@ class LS_Aux_Becke(THC):
         if mode != 'ov':
             raise NotImplementedError("fitting an unrestricted THC in AO mode is currently not supported")
 
-        active = ExperimentRun.get_active()
         auxmol = self.build_auxmol()
-        if active: active.log_metric("fit_auxbasis_size", auxmol.nao_nr())
+        observe.log_metric("fit_auxbasis_size", auxmol.nao_nr())
 
-        logger.info("evaluating basis functions on grid")
+        logger.info("building LS-Aux-Becke THC unrestricted: n_fit_aux=%d", auxmol.nao_nr())
         Xaux_pruned, X_pruned_alpha, X_pruned_beta = self.get_pruned_grid(mode, auxmol)
+        logger.info("pruned grids: X_alpha=%s, X_beta=%s", X_pruned_alpha.shape, X_pruned_beta.shape)
 
         Y = self.build_D(Xaux_pruned, auxmol)
         Z = Y.T @ Y
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
+        logger.info("built unrestricted THC: Z=%s", Z.shape)
 
 
-        return ThcEriUnrestricted(self.mol.nelectron, X_pruned_alpha, X_pruned_beta, Z, Z, Z)
+        return THC_ERI_Unrestricted(self.mol.nelectron, X_pruned_alpha, X_pruned_beta, Z, Z, Z)
 
     prune = False
     def get_pruned_grid(self, mode, auxmol):
-        active = ExperimentRun.get_active()
 
         coords, weights = self.grid.build()
-        if active: active.checkpoint(GRID_BUILD)
+        observe.checkpoint(GRID_BUILD)
+
+        logger.info("built grid: grid=%d", len(coords))
 
         logger.info("evaluating basis functions on grid")
         Raux = eval_basefuncs(auxmol, coords)
@@ -161,10 +186,11 @@ class LS_Aux_Becke(THC):
 
         R = eval_basefuncs(self.mol, coords)
         X = (np.sqrt(np.sqrt(weights))[:, np.newaxis] * R)
-        if active: active.checkpoint(BASIS_FUNCTION_EVAL)
+        observe.checkpoint(BASIS_FUNCTION_EVAL)
+        logger.info("evaluated basis functions on grid: R=%s, R_aux=%s", R.shape, Raux.shape)
 
         if self.prune:
-            logger.info("pruning active: reducing grid size")
+            logger.info("pruning grid: threshold=%.1e", self.cholesky_threshold)
 
             A = GramMetric(Xaux)
             L, piv, num_rank = self.cholesky_decomp.decompose(A, Xaux.shape[0], self.cholesky_threshold)
@@ -173,8 +199,9 @@ class LS_Aux_Becke(THC):
             X_aux_pruned = Xaux[piv, :]
             X_pruned = X[piv, :]
 
-            logger.info(f"selected {len(X_pruned)} pruned points from {len(coords)} parent")
-            if active: active.checkpoint(GRID_PRUNING)
+            observe.checkpoint(GRID_PRUNING)
+            logger.info("pruned grid: %d -> %d points", len(coords), len(X_pruned))
+
         else:
             X_aux_pruned = Xaux
             X_pruned = X
@@ -194,13 +221,14 @@ class LS_Aux_Becke(THC):
             return X_aux_pruned, X_pruned
 
     def build_D(self, Xaux, auxmol) -> Any:
+        logger.info("building Coulomb factor: n_grid=%d, n_aux=%d", Xaux.shape[0], Xaux.shape[1])
         logger.info("computing auxiliary integrals")
         ints_2c2e = auxmol.intor('int2c2e')
 
-        logger.info("performing low-rank decomposition of (K|L) integrals")
+        logger.info("decomposing (K|L) integrals")
 
         L_out, piv, rank, info = dpstrf(ints_2c2e)
-        logger.info(f"(K|L) has numerical rank {rank}/{ints_2c2e.shape[0]}")
+        logger.info("(K|L) rank: %d/%d", rank, ints_2c2e.shape[0])
 
         piv = piv - 1
         U = np.triu(L_out[:rank, :])

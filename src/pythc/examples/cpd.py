@@ -7,7 +7,7 @@ from pyscf.mp.dfmp2 import DFMP2
 
 from pythc.methods.mp2 import LaplaceRMP2
 from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
-from pythc.thc.thc_base import ThcEri
+from pythc.thc.thc_base import THC_ERI
 
 logging.basicConfig(
     stream=sys.stdout, level=logging.INFO,
@@ -36,7 +36,7 @@ def main():
     mf.kernel()
 
     if pathlib.Path("eri.hdf5").exists():
-        eri = ThcEri.from_file("eri.hdf5")
+        eri = THC_ERI.from_file("eri.hdf5")
     else:
         thc = LS_RI_Cholesky(mol=mol, auxbasis=auxbasis, mo_coeff=mf.mo_coeff,
                              cholesky_threshold=1e-5)

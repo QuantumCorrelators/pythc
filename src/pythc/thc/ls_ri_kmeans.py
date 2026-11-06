@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import numpy as np
 from pyscf import gto
@@ -11,7 +12,7 @@ from pythc.grid import GridProvider
 from pythc.thc.ls_ri_thc import LS_RI_THC
 from pythc.thc.ls_thc_funcs import eval_basefuncs
 from pythc.thc.thc_base import Mode
-from pythc.tracking.experiment_run import ExperimentRun
+from tracking import observe
 
 logger = logging.getLogger()
 
@@ -30,18 +31,17 @@ class LS_RI_KMeans(LS_RI_THC):
     """
     def __init__(self,
                  mol: gto.Mole,
-                 auxbasis: str,
+                 auxbasis: Any,
                  mo_coeff: np.ndarray = None,
                  grid: GridProvider = None,
-                 ips_per_naux = None):
+                 ips_per_naux = None,
+                 seed: int | None = None):
         super().__init__(mol=mol, auxbasis=auxbasis, grid=grid, mo_coeff=mo_coeff)
-        self.ips_per_naux = ips_per_naux if ips_per_naux else 2.5
+        self.ips_per_naux = ips_per_naux if ips_per_naux is not None else 2.5
+        self.seed = seed
 
-    @classmethod
-    def __str__(cls):
-        return "isdf_kmeans"
-
-    def build_pruned_X(self, mode: Mode, mo_coeff: np.ndarray, auxmol) -> np.ndarray:
+    def build_pruned_X(self, mode: Mode, mo_coeff: np.ndarray, auxmol,
+                       n_occ: int | None = None) -> np.ndarray:
         """
         Constructs the pruned collocation matrix (X) using density-weighted K-Means.
 
@@ -70,7 +70,6 @@ class LS_RI_KMeans(LS_RI_THC):
             np.ndarray: The pruned collocation matrix containing only the selected
                         interpolation points.
         """
-        active: ExperimentRun = ExperimentRun.get_active()
         n_aux = auxmol.nao_nr()
 
         g = gen_grid.Grids(self.mol)
@@ -88,12 +87,16 @@ class LS_RI_KMeans(LS_RI_THC):
         for ia, atom_coords in enumerate(coords):
             total_grid_size += len(atom_coords)
 
-        if active: active.log_metric("grid_points", total_grid_size)
+        observe.log_metric("grid_points", total_grid_size)
+        logger.info("building KMeans grid: parent=%d, n_aux=%d, ips_per_naux=%.2f",
+                    int(total_grid_size), n_aux, self.ips_per_naux)
         requested_grid_size = (n_aux*self.ips_per_naux)
         if requested_grid_size>total_grid_size:
-            logger.warning('Attempting to build a bigger grid than the parent. Falling back to full parent grid size')
+            logger.warning("requested grid %d exceeds parent %d; using parent size",
+                         int(requested_grid_size), int(total_grid_size))
             requested_grid_size=total_grid_size
 
+        n_atoms = len(coords)
         for aidx, (atom_coords, atom_weights, atom_p_weights) in enumerate(zip(coords, weights, partition_weights)):
             kdtree = KDTree(atom_coords)
 
@@ -103,16 +106,15 @@ class LS_RI_KMeans(LS_RI_THC):
 
             n_clusters = int((len(atom_coords)/total_grid_size)*requested_grid_size)
 
-            logger.info(f"atom grid: {len(atom_coords)} -> nclusters={n_clusters}")
+            logger.info("\tatom %d/%d: grid=%d -> clusters=%d", aidx + 1, n_atoms, len(atom_coords), n_clusters)
             kmeans = KMeans(n_clusters=n_clusters, max_iter=1_000, random_state=aidx)
 
-            n_occ = self.mol.nelectron // 2
+            n_occ = self.mol.nelectron // 2 if n_occ is None else n_occ
             if mode == 'ov' and n_occ > 0:
                 X_atm_mo = X_atm @ mo_coeff
                 X_occ = X_atm_mo[:, :n_occ]
                 X_vir = X_atm_mo[:, n_occ:]
                 density  = np.sum(X_occ ** 2, axis=1) + np.sum(X_vir ** 2, axis=1)
-                #density = np.sum((X_atm @ mo_coeff) ** 2, axis=1)
             else:
                 density = np.sum(X_atm ** 2, axis=1)
 
@@ -123,13 +125,6 @@ class LS_RI_KMeans(LS_RI_THC):
 
             dist, idxs = kdtree.query(centers, k=1, workers=lib.cpu_count())
             X.append(X_atm[idxs])
-
-            if not hasattr(self, 'pruned_coords'):
-                self.pruned_coords = []
-                self.pruned_weights = []
-
-            self.pruned_coords.append(atom_coords[idxs])
-            self.pruned_weights.append(density[idxs])  # <--- ADD [idxs] HERE
 
         X_pruned = np.vstack(X)
 

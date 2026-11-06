@@ -9,7 +9,7 @@ from pyscf import df, gto, ao2mo
 from pythc import lib
 from pythc.thc.checkpoints import METRIC_INVERSION
 from pythc.thc.thc_base import Mode
-from pythc.tracking.experiment_run import ExperimentRun
+from tracking import observe
 
 logger = logging.getLogger()
 
@@ -116,16 +116,8 @@ def build_S(mode: Mode, X, n_occ):
     return S
 
 
-def contract_codensity_full_eri(self, X, mo_coeff):
-    logger.info("using full 4-index integrals for fitting matrix")
-    Xs = lib.einsum("pn,pm->mnp", X, X).reshape(self.N ** 2, -1)
-    eri = get_reference_eri(self.mol, self.N, mo_coeff)
-    E = Xs.T @ eri @ Xs
-    return E
-
-
 def build_aux_coulomb_inv(auxmol):
-    logger.info("Computing 2-center Coulomb metric and J^{-1/2}...")
+    logger.info("building auxiliary Coulomb inverse")
     j2c = auxmol.intor('int2c2e', aosym='s1')
     j2c_cholesky = lib.pseudo_inv_sqrt(j2c)
 
@@ -135,16 +127,19 @@ def build_auxmol(mol, auxbasis) -> gto.Mole:
     return df.addons.make_auxmol(mol, auxbasis=auxbasis)
 
 
-def compute_ao_slices(mol, auxmol):
+def _df_transient_budget_bytes(fraction: float = 0.5) -> int:
+    """Bytes available for DF-contraction temporaries (V chunks + GEMM)."""
+    try:
+        avail = lib.available_memory_bytes()
+    except Exception:
+        import psutil
+        avail = psutil.virtual_memory().available
+    return max(1 << 30, int(avail * fraction))
+
+
+def compute_ao_slices(mol, auxmol, v_budget_bytes: int):
     n_ao = int(mol.nao_nr())
     n_aux = int(auxmol.nao_nr())
-
-    max_mem_mb = lib.pyscf_max_memory()
-    curr_mem_mb = lib.current_memory()
-    live_avail_mb = max(100.0, max_mem_mb - curr_mem_mb)
-
-    # 30% budget for V_chunk buffer
-    v_budget_bytes = live_avail_mb * 0.30 * 1024.0 * 1024.0
 
     ao_loc = mol.ao_loc_nr()
     blocks = []
@@ -159,37 +154,38 @@ def compute_ao_slices(mol, auxmol):
 
         if chunk_bytes >= v_budget_bytes:
             if shl - 1 == start_shl:
-                blocks.append((start_shl, shl, ao_loc[start_shl], ao_loc[shl]))
+                blocks.append((start_shl, shl, int(ao_loc[start_shl]), int(ao_loc[shl])))
                 start_shl = shl
             else:
-                blocks.append((start_shl, shl - 1, ao_loc[start_shl], ao_loc[shl - 1]))
+                blocks.append((start_shl, shl - 1, int(ao_loc[start_shl]), int(ao_loc[shl - 1])))
                 start_shl = shl - 1
 
     if start_shl < mol.nbas:
-        blocks.append((start_shl, mol.nbas, ao_loc[start_shl], ao_loc[mol.nbas]))
+        blocks.append((start_shl, mol.nbas, int(ao_loc[start_shl]), int(ao_loc[mol.nbas])))
 
-    logger.info(f"Dynamic Blocking: V_chunk budget = {v_budget_bytes / 1e6:.0f} MB. Processing in {len(blocks)} chunks.")
+    logger.info("AO blocking: budget=%.0f MB, n_blocks=%d", v_budget_bytes / 1e6, len(blocks))
 
     return blocks
 
 def build_coulomb_matrix(mode: Mode, mol: gto.Mole, auxmol: gto.Mole, X, mo_coeff):
-    active = ExperimentRun.get_active()
     n_occ = mol.nelectron // 2
     n_vir = mol.nao_nr() - n_occ
 
+    logger.info("building Coulomb matrix: X=%s, n_occ=%d", X.shape, n_occ)
     S = build_S(mode, X, n_occ)
     S_inv = lib.pinv(S)
-    if active: active.checkpoint(METRIC_INVERSION)
+    observe.checkpoint(METRIC_INVERSION)
+    logger.info("inverted metric: S=%s", S.shape)
 
     j2c_inv = build_aux_coulomb_inv(auxmol)
     E = contract_codensity_df_eri(mode, X, mo_coeff, mol, auxmol, j2c_inv, n_occ, n_vir)
 
     D = E @ S_inv
+    logger.info("built Coulomb matrix: D=%s", D.shape)
 
     return D
 
 def build_coulomb_matrix_asym(mode: Mode, mol: gto.Mole, auxmol: gto.Mole, X_alpha, X_beta, mo_coeff):
-    active = ExperimentRun.get_active()
 
     S = mol.spin
     N = mol.nao_nr()
@@ -201,18 +197,23 @@ def build_coulomb_matrix_asym(mode: Mode, mol: gto.Mole, auxmol: gto.Mole, X_alp
     mo_coeff_beta = mo_coeff[1]
 
 
+    logger.info("building unrestricted Coulomb matrices: X_alpha=%s, X_beta=%s", X_alpha.shape, X_beta.shape)
     S_aa = build_S(mode, X_alpha, nocc_alpha)
     S_aa_inv = lib.pinv(S_aa)
+    logger.info("inverted alpha metric: S_aa=%s", S_aa.shape)
 
     S_bb = build_S(mode, X_beta, nocc_beta)
     S_bb_inv = lib.pinv(S_bb)
-    if active: active.checkpoint(METRIC_INVERSION)
+    observe.checkpoint(METRIC_INVERSION)
+    logger.info("inverted beta metric: S_bb=%s", S_bb.shape)
 
     j2c_inv = build_aux_coulomb_inv(auxmol)
+    logger.info("contracting alpha fitting matrix")
     E_aa = contract_codensity_df_eri(mode, X_alpha, mo_coeff_alpha,
                                      mol, auxmol, j2c_inv,
                                      nocc_alpha, nvir_alpha)
 
+    logger.info("contracting beta fitting matrix")
     E_bb = contract_codensity_df_eri(mode, X_beta, mo_coeff_beta,
                                      mol, auxmol, j2c_inv,
                                      nocc_beta, nvir_beta)
@@ -239,12 +240,12 @@ def contract_codensity_sri_eri(mode: Mode, X: np.ndarray, mo_coeff: np.ndarray, 
     return Y
 
 
-def contract_codensity_df_eri(mode, X, mo_coeff, mol, auxmol, j2c_inv, n_occ, n_vir):
-    logger.info("Using DIRECT density fitting with 2D Chunking and pure BLAS contraction")
+def contract_codensity_df_eri(mode: Mode, X, mo_coeff, mol, auxmol, j2c_inv, n_occ, n_vir):
     p, n = X.shape
 
-    n_aux = auxmol.nao_nr()
-    n_ao = mol.nao_nr()
+    n_aux = int(auxmol.nao_nr())
+    n_ao = int(mol.nao_nr())
+    logger.info("contracting DF integrals: X=%s, n_aux=%d", X.shape, n_aux)
 
     if mode == 'ao':
         X_left = X
@@ -257,22 +258,44 @@ def contract_codensity_df_eri(mode, X, mo_coeff, mol, auxmol, j2c_inv, n_occ, n_
 
     W = np.zeros((n_aux, p))
 
-    for shl0, shl1, ao0, ao1 in compute_ao_slices(mol, auxmol):
-        logger.info(f"Direct DF: Processing AO shells {shl0}-{shl1} / {mol.nbas} (AOs {ao0}-{ao1})")
+    budget = _df_transient_budget_bytes()
+    v_budget = max(1 << 30, budget // 2)
+
+    blocks = compute_ao_slices(mol, auxmol, v_budget)
+    n_blocks = len(blocks)
+    logger.info("processing AO blocks: n_blocks=%d", n_blocks)
+
+    for i, (shl0, shl1, ao0, ao1) in enumerate(blocks):
+        logger.info("\tDF block %d/%d: shells %d-%d/%d (AOs %d-%d)",
+                    i + 1, n_blocks, shl0, shl1, mol.nbas, ao0, ao1)
 
         shls_slice = (shl0, shl1, 0, mol.nbas, 0, auxmol.nbas)
 
         V_chunk = df.incore.aux_e2(mol, auxmol, intor='int3c2e', aosym='s1', shls_slice=shls_slice)
 
-        ni = ao1 - ao0
-        nj = n_ao
+        ni = int(ao1 - ao0)
+        nj = int(n_ao)
         V_chunk = V_chunk.reshape(ni, nj, n_aux)
+        V_2d = V_chunk.reshape(ni * nj, n_aux)
+        v_bytes = ni * nj * n_aux * 8
 
-        W += lib.einsum('ijq,gi,gj->qg', V_chunk, X_left[:, ao0:ao1], X_right)
+        # Grid blocking so T + C fit in whatever the V chunk left over.
+        per_g_bytes = 8 * (ni * nj + n_aux)
+        grid_budget = max(budget - v_bytes, budget // 4)
+        gb = max(1, min(p, grid_budget // per_g_bytes))
+        n_gblocks = (p + gb - 1) // gb
+        logger.info(f"Direct DF: grid blocking {n_gblocks} x {gb} (ni={ni}, nj={nj}, naux={n_aux})")
 
-        del V_chunk
+        Xl_chunk = X_left[:, ao0:ao1]
+        for g0 in range(0, p, gb):
+            g1 = min(g0 + gb, p)
+            T = (Xl_chunk[g0:g1, :, None] * X_right[g0:g1, None, :]).reshape(g1 - g0, ni * nj)
+            W[:, g0:g1] += (T @ V_2d).T
+            del T
 
-    logger.info("Applying inverse metric to final grid...")
+        del V_chunk, V_2d, Xl_chunk
+
+    logger.info("applying Coulomb inverse: W=%s", W.shape)
     Y = pyscflib.dot(j2c_inv, W)
 
     return Y

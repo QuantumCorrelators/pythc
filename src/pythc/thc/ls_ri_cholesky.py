@@ -1,5 +1,4 @@
 import logging
-from typing import Type
 
 import numpy as np
 import scipy as sp
@@ -11,9 +10,9 @@ from pythc.decomp.cholesky import SymMetric, SymMetricOV
 from pythc.grid import GridProvider, BeckeGrid
 from pythc.thc.checkpoints import GRID_BUILD, BASIS_FUNCTION_EVAL, GRID_PRUNING, FITTING_MATRIX, METRIC_INVERSION
 from pythc.thc.ls_thc_funcs import build_auxmol, build_aux_coulomb_inv, eval_basefuncs, contract_codensity_df_eri
-from pythc.thc.thc_base import ThcEri, Mode, THC
-from pythc.thc.thc_base import ThcEriUnrestricted
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc.thc.thc_base import THC_ERI, Mode, THC
+from pythc.thc.thc_base import THC_ERI_Unrestricted
+from tracking import observe
 
 logger = logging.getLogger()
 
@@ -34,26 +33,23 @@ class LS_RI_Cholesky(THC):
                  grid: GridProvider = None,
                  mo_coeff: np.ndarray = None,
                  auxbasis: str = None,
-                 cholesky_decomp: Type[Cholesky] = AccelRPCholesky,
+                 cholesky_decomp: Cholesky = None,
                  cholesky_threshold: float = 1e-5,
-                 symmetry: str = 's2'):
+                 symmetry: str = 's2',
+                 seed: int | None = None):
 
         super().__init__()
         self.mol = mol
         self.N = mol.nao_nr()
         self.auxbasis = auxbasis if auxbasis is not None else f'{self.mol.basis}-ri'
-        self.cholesky_decomp = cholesky_decomp()
+        self.cholesky_decomp = cholesky_decomp if cholesky_decomp is not None else AccelRPCholesky(seed=seed)
         self.cholesky_threshold = cholesky_threshold
         self.grid = grid if grid is not None else BeckeGrid(mol)
         self.mol = mol
         self.symmetry = symmetry
         self.mo_coeff = mo_coeff if mo_coeff is not None and len(mo_coeff) > 0 else np.eye(mol.nao_nr())
 
-    @classmethod
-    def __str__(cls):
-        return "cd_ls_thc"
-
-    def build(self, mode: Mode = "ao") -> ThcEri:
+    def build(self, mode: Mode = "ao") -> THC_ERI:
         """
         Builds a spin-restricted Tensor Hypercontraction (THC) representation with grid pruning.
 
@@ -68,27 +64,26 @@ class LS_RI_Cholesky(THC):
         6. Solve for the Coulomb kernel matrix (Z) efficiently using triangular solvers.
 
         Returns:
-            ThcEri: Dataclass containing the number of electrons, pruned X, and Z.
+            THC_ERI: Dataclass containing the number of electrons, pruned X, and Z.
 
         Raises:
             NotImplementedError: If the fitting mode is not 'ao' or 'ov'.
         """
-        active = ExperimentRun.get_active()
 
         grid, weigths = self.grid.build()
-        if active: active.checkpoint(GRID_BUILD)
+        observe.checkpoint(GRID_BUILD)
 
-        logger.info(f"built grid of size: {len(grid)}")
+        logger.info("building LS-RI-Cholesky THC: mode=%s, grid=%d, nao=%d", mode, len(grid), self.N)
 
         R = eval_basefuncs(self.mol, grid)  # (grid, N)
-        logger.info(f"got {R.shape} basis function on grid matrix")
+        logger.info("evaluated basis functions on grid: R=%s", R.shape)
 
         X = (np.sqrt(np.sqrt(weigths))[:, np.newaxis] * R)
         if mode != 'ao':
             X = X @ self.mo_coeff
 
-        if active: active.checkpoint(BASIS_FUNCTION_EVAL)
-        logger.info(f"using cholesky threshold: {self.cholesky_threshold}")
+        observe.checkpoint(BASIS_FUNCTION_EVAL)
+        logger.info("pruning grid: threshold=%.1e", self.cholesky_threshold)
 
         n_occ = self.mol.nelectron // 2
         n_virt = self.N - n_occ
@@ -108,24 +103,26 @@ class LS_RI_Cholesky(THC):
 
         X_pruned = X[piv, :]
 
-        if active: active.checkpoint(GRID_PRUNING)
-        logger.info(f"building fitting matrix")
+        observe.checkpoint(GRID_PRUNING)
+        logger.info("pruned grid: %d -> %d points", n_grid, num_rank)
 
         auxmol = build_auxmol(self.mol, self.auxbasis)
         j2c_inv = build_aux_coulomb_inv(auxmol)
-        logger.info("building coulomb kernel matrix")
+        logger.info("building fitting matrix: n_aux=%d, X=%s", auxmol.nao_nr(), X_pruned.shape)
 
         Y = contract_codensity_df_eri(mode, X_pruned, self.mo_coeff, self.mol, auxmol, j2c_inv, n_occ, n_virt)
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
 
         D = self.build_coulomb_matrix_sep(L, Y)
-        if active: active.checkpoint(METRIC_INVERSION)
+        observe.checkpoint(METRIC_INVERSION)
+        logger.info("solved Coulomb metric: D=%s", D.shape)
 
         Z = D @ D.T
+        logger.info("built THC: X=%s, Z=%s", X_pruned.shape, Z.shape)
 
-        return ThcEri(self.mol.nelectron, X_pruned, Z, D)
+        return THC_ERI(self.mol.nelectron, X_pruned, Z, D)
 
-    def build_unrestricted(self, mode: Mode = "ao") -> ThcEriUnrestricted:
+    def build_unrestricted(self, mode: Mode = "ao") -> THC_ERI_Unrestricted:
         """
         Builds a spin-unrestricted Tensor Hypercontraction (THC) representation with grid pruning.
 
@@ -141,7 +138,7 @@ class LS_RI_Cholesky(THC):
         6. Compute the unrestricted Coulomb kernel matrices (Z_aa, Z_bb, Z_ab) via triangular solvers.
 
         Returns:
-            ThcEriUnrestricted: Dataclass containing the number of electrons, pruned collocation
+            THC_ERI_Unrestricted: Dataclass containing the number of electrons, pruned collocation
                                 matrices, and Coulomb kernels.
 
         Raises:
@@ -157,40 +154,40 @@ class LS_RI_Cholesky(THC):
         nvir_alpha = N - nocc_alpha
         nvir_beta = N - nocc_beta
 
-        active = ExperimentRun.get_active()
         mo_coeff_alpha = self.mo_coeff[0]
         mo_coeff_beta = self.mo_coeff[1]
 
         grid, weights = self.grid.build()
-        if active: active.checkpoint(GRID_BUILD)
+        observe.checkpoint(GRID_BUILD)
+        logger.info("building LS-RI-Cholesky THC unrestricted: grid=%d, nao=%d", len(grid), N)
 
-        logger.info("evaluating basis functions on grid")
         R = eval_basefuncs(self.mol, coords=grid)
+        logger.info("evaluated basis functions on grid: R=%s", R.shape)
 
-        logger.info("building metric matrix")
         X = np.sqrt(np.sqrt(weights))[:, np.newaxis] * R
 
         X_alpha = X @ mo_coeff_alpha
         X_beta = X @ mo_coeff_beta
-        if active: active.checkpoint(BASIS_FUNCTION_EVAL)
+        observe.checkpoint(BASIS_FUNCTION_EVAL)
 
         n_grid = X.shape[0]
 
-        logger.info(f"using cholesky threshold: {self.cholesky_threshold}")
+        logger.info("pruning grids: threshold=%.1e", self.cholesky_threshold)
         L_aa, X_alpha_pruned_aa = self.prune_grid(X_alpha, n_grid, nocc_alpha)
+        logger.info("pruned alpha grid: %d -> %d points", n_grid, X_alpha_pruned_aa.shape[0])
         L_bb, X_beta_pruned_bb = self.prune_grid(X_beta, n_grid, nocc_beta)
+        logger.info("pruned beta grid: %d -> %d points", n_grid, X_beta_pruned_bb.shape[0])
 
-        if active: active.checkpoint(GRID_PRUNING)
-        logger.info(f"building fitting matrices")
+        observe.checkpoint(GRID_PRUNING)
 
         auxmol = build_auxmol(self.mol, self.auxbasis)
         j2c_inv = build_aux_coulomb_inv(auxmol)
-
-        logger.info("building coulomb kernel matrices")
+        logger.info("building fitting matrices: n_aux=%d, X_alpha=%s, X_beta=%s",
+                    auxmol.nao_nr(), X_alpha_pruned_aa.shape, X_beta_pruned_bb.shape)
 
         Y_alpha = contract_codensity_df_eri(mode, X_alpha_pruned_aa, mo_coeff_alpha, self.mol, auxmol, j2c_inv, nocc_alpha, nvir_alpha)
         Y_beta = contract_codensity_df_eri(mode, X_beta_pruned_bb, mo_coeff_beta, self.mol, auxmol, j2c_inv, nocc_beta, nvir_beta)
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
 
         Z_aa = Z_bb = np.zeros((n_grid, n_grid))
         if L_aa.shape[0] > 0:
@@ -200,9 +197,11 @@ class LS_RI_Cholesky(THC):
             Z_bb = self.build_coulomb_matrix_sym(L_bb, Y_beta)
 
         Z_ab = self.build_coulomb_matrix_asym(L_aa, Y_alpha, L_bb, Y_beta)
-        if active: active.checkpoint(METRIC_INVERSION)
+        observe.checkpoint(METRIC_INVERSION)
+        logger.info("built unrestricted THC: X_alpha=%s, X_beta=%s, Z_aa=%s, Z_bb=%s",
+                    X_alpha_pruned_aa.shape, X_beta_pruned_bb.shape, Z_aa.shape, Z_bb.shape)
 
-        return ThcEriUnrestricted(self.mol.nelectron, X_alpha_pruned_aa, X_beta_pruned_bb, Z_aa, Z_bb, Z_ab)
+        return THC_ERI_Unrestricted(self.mol.nelectron, X_alpha_pruned_aa, X_beta_pruned_bb, Z_aa, Z_bb, Z_ab)
 
     def prune_grid(self, X: np.ndarray, n_grid: int, n_occ: int) -> tuple[np.ndarray, np.ndarray]:
         if n_occ > 0:

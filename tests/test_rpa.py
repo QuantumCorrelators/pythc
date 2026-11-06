@@ -1,50 +1,42 @@
-import pathlib
+import logging
 import time
 
-from pyscf import gto, scf
+import pytest
+from pyscf import gto
+from pyscf.gw.rpa import RPA as PyscfRPA
 
-from pythc.decomp.cholesky import AccelRPCholesky
-from pythc.methods.rpa import thc_rpa
-from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
-from pythc.thc.thc_base import ThcEri
+from pythc.const import KCALPERMOL_PER_HARTREE
+from pythc.methods.rpa import RPA
+from tests.thc_helpers import MO_NAMES, RPA_THRESHOLDS, df_scf, make_thc_mo
+
+logger = logging.getLogger(__name__)
+
+WATER_CLUSTER = """
+H        0.087529        0.023820        0.930805
+O        0.657172        0.599414        0.406256
+H        0.792448        1.344387        1.004310
+"""
+
+BASIS = "cc-pvdz"
+AUXBASIS = "cc-pvdz-ri"
+
 
 # ----------------------------------------------------------------------
-# 3. Test Function (Discovered by Pytest / IDE Test Runners)
+# Test Function (Discovered by Pytest / IDE Test Runners)
 # ----------------------------------------------------------------------
-def test_thc_rpa_vs_pyscf():
-    water_cluster = """
-    H        0.087529        0.023820        0.930805
-    O        0.657172        0.599414        0.406256
-    H        0.792448        1.344387        1.004310
-    """
-
+@pytest.mark.parametrize("thc_name", MO_NAMES)
+def test_thc_rpa_vs_pyscf(thc_name):
     mol = gto.Mole()
-    mol.basis = 'cc-pvdz'
-    mol.atom = water_cluster
+    mol.basis = BASIS
+    mol.atom = WATER_CLUSTER
     mol.build()
 
-    auxbasis = 'cc-pvdz-ri'
-
     print("\n--- Running SCF ---")
-    mf = scf.RHF(mol)
-    mf = mf.density_fit(auxbasis=auxbasis)
-    mf.verbose = 0
-    mf.kernel()
-
-    print("--- Generating THC ERIs ---")
-    thc = LS_RI_Cholesky(mol=mol, auxbasis=auxbasis, mo_coeff=mf.mo_coeff,
-                         cholesky_threshold=1e-5,
-                         cholesky_decomp=AccelRPCholesky)
-    eri_thc = thc.build(mode='ov')
+    mf = df_scf(mol, AUXBASIS)
 
     # 1. Run Standard PySCF RPA
     print("--- Running Standard PySCF RPA ---")
-    try:
-        from pyscf.gw.rpa import RPA
-    except ImportError:
-        raise ImportError("PySCF RPA module not found. Ensure PySCF is installed.")
-
-    rpa_ref = RPA(mf)
+    rpa_ref = PyscfRPA(mf)
     rpa_ref.verbose = 0
 
     t0 = time.perf_counter()
@@ -53,26 +45,29 @@ def test_thc_rpa_vs_pyscf():
     time_ref = t1 - t0
 
     # 2. Run Custom THC-RPA
-    print("--- Running THC-RPA ---")
+    print(f"--- Running THC-RPA ({thc_name}) ---")
+    thc = make_thc_mo(thc_name, mol, mf, AUXBASIS)
     t0 = time.perf_counter()
-    e_corr_thc = thc_rpa(mol, mf, eri_thc)
+    e_corr_thc = RPA(mf, thc).kernel()
     t1 = time.perf_counter()
     time_thc = t1 - t0
 
     # 3. Report
     print("\n" + "=" * 40)
-    print("           RPA RESULTS")
+    print(f"           RPA RESULTS ({thc_name})")
     print("=" * 40)
     print(f"PySCF E_corr : {e_corr_ref: 15.8f} Eh  ({time_ref:.3f} s)")
     print(f"THC   E_corr : {e_corr_thc: 15.8f} Eh  ({time_thc:.3f} s)")
     print("-" * 40)
 
-    error = abs(e_corr_ref - e_corr_thc)
-    print(f"Absolute Diff: {error: 15.8e} Eh")
+    error = abs(e_corr_ref - e_corr_thc) * KCALPERMOL_PER_HARTREE
+    print(f"Absolute Diff: {error: 15.8e} kcal/mol")
+    logger.info("RPA %s: ref=%s thc=%s err=%s", thc_name, e_corr_ref, e_corr_thc, error)
 
-    assert error < 1e-4, f"THC error ({error}) exceeds expected bounds."
+    assert error < RPA_THRESHOLDS[thc_name], f"THC error ({error}) exceeds expected bounds."
     print("TEST PASSED: THC correlation energy matches RI-RPA within truncation threshold.")
 
 
 if __name__ == "__main__":
-    test_thc_rpa_vs_pyscf()
+    for _thc_name in MO_NAMES:
+        test_thc_rpa_vs_pyscf(_thc_name)
