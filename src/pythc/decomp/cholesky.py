@@ -7,7 +7,7 @@ from pythc.decomp.acccholesky.matrix import FunctionMatrix
 from pythc.decomp.acccholesky.rpcholesky import rpcholesky, greedy, block_greedy
 
 from pythc import lib
-from tracking import Configurable
+from pythc._tracking import Configurable
 
 logger = logging.getLogger()
 

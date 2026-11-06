@@ -5,8 +5,7 @@ import numpy as np
 from pyscf import gto, dft
 from pyscf.dft import treutler_prune
 
-from tracking.configurable import Configurable
-from tracking import observe
+from pythc._tracking import Configurable, observe
 
 
 class GridProvider(ABC,Configurable):

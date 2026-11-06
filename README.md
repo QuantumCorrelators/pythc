@@ -65,6 +65,16 @@ uv add pythc
 
 will add the package to your `pyproject.toml`.
 
+### Optional experiment tracking
+
+`PyTHC` works without the external [`tracking`](https://github.com/nikplx/tracking) library. When it is not installed, checkpoint and metric logging calls are no-ops. To enable tracking, install it manually:
+
+```shell
+pip install git+https://github.com/nikplx/tracking.git
+```
+
+It is intentionally not a PyPI dependency while the `tracking` package is not published there.
+
 
 ## Developer Instructions
 
@@ -84,6 +94,12 @@ cd pythc
 uv sync
 ```
 given uv is installed on your system.
+
+To also install the optional `tracking` integration while developing, run:
+
+```shell
+uv sync --group tracking
+```
 
 
 ## Basic Usage

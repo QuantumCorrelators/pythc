@@ -11,7 +11,7 @@ from pythc.thc.ls_thc_funcs import eval_basefuncs
 from pythc.thc.thc_base import Mode
 from pythc.thc.checkpoints import GRID_BUILD, BASIS_FUNCTION_EVAL
 from pythc.thc.ls_ri_thc import LS_RI_THC
-from tracking import observe
+from pythc._tracking import observe
 
 logger = logging.getLogger()
 

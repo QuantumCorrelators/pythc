@@ -13,7 +13,7 @@ from pythc.thc.checkpoints import GRID_BUILD, BASIS_FUNCTION_EVAL, GRID_PRUNING,
 from pythc.thc.ls_thc_funcs import eval_basefuncs
 from pythc.thc.thc_base import THC, THC_ERI, ERI, Mode
 from pythc.thc.thc_base import THC_ERI_Unrestricted
-from tracking import observe
+from pythc._tracking import observe
 
 logger = logging.getLogger()
 

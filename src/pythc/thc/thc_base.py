@@ -5,9 +5,8 @@ from typing import Literal
 import h5py
 import numpy as np
 
+from pythc._tracking import Configurable, observe
 import pythc.lib as lib
-from tracking.configurable import Configurable
-from tracking import observe
 
 type Mode = Literal['ao', 'ov', 'oo', 'vv', 'pr']
 

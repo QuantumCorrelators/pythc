@@ -9,7 +9,7 @@ from pyscf import df, gto, ao2mo
 from pythc import lib
 from pythc.thc.checkpoints import METRIC_INVERSION
 from pythc.thc.thc_base import Mode
-from tracking import observe
+from pythc._tracking import observe
 
 logger = logging.getLogger()
 

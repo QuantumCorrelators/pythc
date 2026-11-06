@@ -16,7 +16,7 @@ from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
 from pythc.thc.ls_snri_cholesky import LS_snRI_Cholesky
 from pythc.thc.thc_base import ERI, THC_ERI, THC
 from pythc.thc.thc_base import THC_ERI_Unrestricted
-from tracking import observe
+from pythc._tracking import observe
 
 if lib.has_cuda_gpu():
     import cupy as xp

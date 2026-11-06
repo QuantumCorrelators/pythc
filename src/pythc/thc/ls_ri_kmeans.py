@@ -12,7 +12,7 @@ from pythc.grid import GridProvider
 from pythc.thc.ls_ri_thc import LS_RI_THC
 from pythc.thc.ls_thc_funcs import eval_basefuncs
 from pythc.thc.thc_base import Mode
-from tracking import observe
+from pythc._tracking import observe
 
 logger = logging.getLogger()
 

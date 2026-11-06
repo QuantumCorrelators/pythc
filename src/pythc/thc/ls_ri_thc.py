@@ -9,7 +9,7 @@ from pythc.thc.checkpoints import GRID_PRUNING, FITTING_MATRIX
 from pythc.thc.ls_thc_funcs import build_auxmol, build_coulomb_matrix, \
     build_coulomb_matrix_asym, eval_basefuncs
 from pythc.thc.thc_base import THC, THC_ERI, Mode, ERI, THC_ERI_Unrestricted
-from tracking import observe
+from pythc._tracking import observe
 
 logger = logging.getLogger()
 
@@ -93,7 +93,8 @@ class LS_RI_THC(THC):
         auxmol = build_auxmol(self.mol, self.auxbasis)
         logger.info("built auxmol: n_aux=%d", auxmol.nao_nr())
 
-        X = self.build_pruned_X(mode, self.mo_coeff, auxmol)
+        nocc = self.mol.nelectron // 2
+        X = self.build_pruned_X(mode, self.mo_coeff, auxmol, nocc)
         if mode == 'ov':
             X = X @ self.mo_coeff
         logger.info("pruned grid: X=%s", X.shape)

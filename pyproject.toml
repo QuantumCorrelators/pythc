@@ -1,6 +1,6 @@
 [project]
 name = "pythc"
-version = "0.0.3"
+version = "0.0.4"
 description = "Python Tensor Hypercontraction (THC) library"
 readme = "README.md"
 authors = [{ name = "Niklas Paulicks", email = "niklas.paulicks@uni-hamburg.de" }]
@@ -28,7 +28,6 @@ dependencies = [
     "basis-set-exchange>=0.12",
     "psutil>=7.2.2",
     "kahypar>=1.3.7",
-    "tracking @ git+https://github.com/nikplx/tracking@main",
 ]
 
 
@@ -42,10 +41,13 @@ cuda = [
     "cuda-toolkit>=13.1.1",
 ]
 
-[tool.hatch.metadata]
-allow-direct-references = true
-
 [dependency-groups]
+# Optional tracking integration for local development and CI. This cannot be a
+# [project.optional-dependencies] extra because PyPI rejects direct URL
+# dependencies in published package metadata.
+tracking = [
+    "tracking @ git+https://github.com/nikplx/tracking@main",
+]
 dev = [
     "coverage (>=7.8.2,<8.0.0)",
     "duckdb>=1.3.2",

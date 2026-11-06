@@ -9,7 +9,7 @@ from pythc.grid import BeckeGrid
 from pythc.thc.checkpoints import GRID_BUILD, BASIS_FUNCTION_EVAL, GRID_PRUNING, FITTING_MATRIX, METRIC_INVERSION
 from pythc.thc.ls_thc_funcs import build_auxmol, build_aux_coulomb_inv, eval_basefuncs
 from pythc.thc.thc_base import THC_ERI, Mode, THC_ERI_Unrestricted, THC
-from tracking import observe
+from pythc._tracking import observe
 
 logger = logging.getLogger()
 

@@ -37,9 +37,8 @@ from pyscf.gw.gw_ac import _get_scaled_legendre_roots
 from pyscf.mp import dfmp2, dfump2
 from pyscf.scf.hf import SCF
 
+from pythc._tracking import Configurable, observe
 import pythc.lib as lib
-from tracking import observe
-from tracking import Configurable
 
 logger = logging.getLogger(__name__)
 
