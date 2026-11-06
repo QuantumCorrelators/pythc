@@ -8,8 +8,8 @@ from pythc.grid import GridProvider, BeckeGrid
 from pythc.thc.checkpoints import GRID_PRUNING, FITTING_MATRIX
 from pythc.thc.ls_thc_funcs import build_auxmol, build_coulomb_matrix, \
     build_coulomb_matrix_asym, eval_basefuncs
-from pythc.thc.thc_base import THC, ThcEri, Mode, ERI, ThcEriUnrestricted
-from pythc.tracking.experiment_run import ExperimentRun
+from pythc.thc.thc_base import THC, THC_ERI, Mode, ERI, THC_ERI_Unrestricted
+from pythc._tracking import observe
 
 logger = logging.getLogger()
 
@@ -40,7 +40,13 @@ class LS_RI_THC(THC):
         self.mo_coeff = mo_coeff if mo_coeff is not None and len(mo_coeff) > 0 else np.eye(mol.nao_nr())
 
     @abstractmethod
-    def build_pruned_X(self, mode: Mode, mo_coeff: np.ndarray, auxmol: gto.Mole) -> np.ndarray:
+    def build_pruned_X(self, mode: Mode, mo_coeff: np.ndarray, auxmol: gto.Mole,
+                       n_occ: int | None = None) -> np.ndarray:
+        """Prune the grid; ``n_occ`` overrides the default closed-shell
+        occupation (required for spin-specific calls with alpha/beta
+        coefficients, where ``mol.nelectron // 2`` is wrong for at least
+        one spin).
+        """
         """
         Constructs the pruned collocation matrix (X).
 
@@ -77,28 +83,32 @@ class LS_RI_THC(THC):
         4. Coulomb Kernel: Computes the final kernel matrix as Z = D.T @ D.
 
         Returns:
-            ThcEri: Dataclass containing the number of electrons, pruned X, and Z.
+            THC_ERI: Dataclass containing the number of electrons, pruned X, and Z.
 
         Raises:
             NotImplementedError: If the fitting mode is not 'ao' or 'ov'.
         """
-        active = ExperimentRun.get_active()
 
+        logger.info("building LS-RI-THC: mode=%s, nao=%d, auxbasis=%s", mode, self.N, self.auxbasis)
         auxmol = build_auxmol(self.mol, self.auxbasis)
+        logger.info("built auxmol: n_aux=%d", auxmol.nao_nr())
 
-        X = self.build_pruned_X(mode, self.mo_coeff, auxmol)
+        nocc = self.mol.nelectron // 2
+        X = self.build_pruned_X(mode, self.mo_coeff, auxmol, nocc)
         if mode == 'ov':
             X = X @ self.mo_coeff
+        logger.info("pruned grid: X=%s", X.shape)
 
-        if active: active.checkpoint(GRID_PRUNING)
+        observe.checkpoint(GRID_PRUNING)
 
         D = build_coulomb_matrix(mode, self.mol, auxmol, X, self.mo_coeff)
         Z = D.T @ D
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
+        logger.info("built THC: X=%s, Z=%s", X.shape, Z.shape)
 
-        return ThcEri(self.mol.nelectron, X, Z, D.T)
+        return THC_ERI(self.mol.nelectron, X, Z, D.T)
 
-    def build_unrestricted(self, mode: Mode = "ao") -> ThcEriUnrestricted:
+    def build_unrestricted(self, mode: Mode = "ao") -> THC_ERI_Unrestricted:
         """
         Builds a spin-unrestricted LS-THC representation.
 
@@ -122,18 +132,19 @@ class LS_RI_THC(THC):
            - Z_ab = D_aa.T @ D_bb
 
         Returns:
-            ThcEriUnrestricted: Dataclass containing the number of electrons, spin-specific
+            THC_ERI_Unrestricted: Dataclass containing the number of electrons, spin-specific
                                 collocation matrices, and Coulomb kernels.
 
         Raises:
             NotImplementedError: If the fitting mode is set to 'ao'.
         """
-        active = ExperimentRun.get_active()
 
         if mode == 'ao':
             raise NotImplementedError("fitting an unrestricted THC in AO mode is currently not supported")
 
+        logger.info("building LS-RI-THC unrestricted: mode=%s, nao=%d", mode, self.N)
         auxmol = build_auxmol(self.mol, self.auxbasis)
+        logger.info("built auxmol: n_aux=%d", auxmol.nao_nr())
 
         S = self.mol.spin
         nocc_alpha = (self.mol.nelectron + S) // 2
@@ -143,25 +154,32 @@ class LS_RI_THC(THC):
 
         if nocc_alpha == 0 or nocc_beta == 0:
             grid, weights = self.grid.build()
+            logger.info("built fallback grid: grid=%d", len(grid))
             R = eval_basefuncs(self.mol, coords=grid)
             X = np.sqrt(np.sqrt(weights))[:, np.newaxis] * R
 
         if nocc_alpha > 0:
-            X_alpha = self.build_pruned_X(mode, mo_coeff_alpha, auxmol)
+            X_alpha = self.build_pruned_X(mode, mo_coeff_alpha, auxmol,
+                                          n_occ=nocc_alpha)
+            logger.info("pruned alpha grid: X_alpha=%s", X_alpha.shape)
         else:
             X_alpha = X
 
         if nocc_beta > 0:
-            X_beta = self.build_pruned_X(mode, mo_coeff_beta, auxmol)
+            X_beta = self.build_pruned_X(mode, mo_coeff_beta, auxmol,
+                                         n_occ=nocc_beta)
+            logger.info("pruned beta grid: X_beta=%s", X_beta.shape)
         else:
             X_beta = X
 
         X_alpha = X_alpha @ mo_coeff_alpha
         X_beta = X_beta @ mo_coeff_beta
 
-        if active: active.checkpoint(GRID_PRUNING)
+        observe.checkpoint(GRID_PRUNING)
 
         Z_aa, Z_bb, Z_ab = build_coulomb_matrix_asym(mode, self.mol, auxmol, X_alpha, X_beta, self.mo_coeff)
-        if active: active.checkpoint(FITTING_MATRIX)
+        observe.checkpoint(FITTING_MATRIX)
+        logger.info("built unrestricted THC: X_alpha=%s, X_beta=%s, Z_aa=%s, Z_bb=%s",
+                    X_alpha.shape, X_beta.shape, Z_aa.shape, Z_bb.shape)
 
-        return ThcEriUnrestricted(self.mol.nelectron, X_alpha, X_beta, Z_aa, Z_bb, Z_ab)
+        return THC_ERI_Unrestricted(self.mol.nelectron, X_alpha, X_beta, Z_aa, Z_bb, Z_ab)

@@ -1,10 +1,10 @@
 [project]
 name = "pythc"
-version = "0.0.3"
+version = "0.0.4"
 description = "Python Tensor Hypercontraction (THC) library"
 readme = "README.md"
 authors = [{ name = "Niklas Paulicks", email = "niklas.paulicks@uni-hamburg.de" }]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "Apache Software License (Apache License 2.0)" } # or matching your LICENCE file
 keywords = ["quantum", "chemistry", "thc", "scf", "mp2"]
 classifiers = [
@@ -24,9 +24,7 @@ dependencies = [
     "numba>=0.62.1",
     "python-dotenv>=1.2.1",
     "h5py>=3.15.1",
-    "pyinstrument>=5.1.2",
     "cotengra>=0.8.0",
-    "pymongo>=4.16.0",
     "basis-set-exchange>=0.12",
     "psutil>=7.2.2",
     "kahypar>=1.3.7",
@@ -43,10 +41,13 @@ cuda = [
     "cuda-toolkit>=13.1.1",
 ]
 
-[tool.hatch.metadata]
-allow-direct-references = true
-
 [dependency-groups]
+# Optional tracking integration for local development and CI. This cannot be a
+# [project.optional-dependencies] extra because PyPI rejects direct URL
+# dependencies in published package metadata.
+tracking = [
+    "tracking @ git+https://github.com/nikplx/tracking@main",
+]
 dev = [
     "coverage (>=7.8.2,<8.0.0)",
     "duckdb>=1.3.2",
@@ -85,3 +86,4 @@ log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+

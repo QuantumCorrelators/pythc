@@ -11,7 +11,7 @@ from pythc.decomp.acccholesky.matrix import AbstractPSDMatrix, PSDMatrix
 
 greedy_lapack = sp.linalg.get_lapack_funcs('pstrf', dtype=np.float64)
 
-def cholesky_helper(A, k, alg, stoptol = 0):
+def cholesky_helper(A, k, alg, stoptol = 0, seed = None):
     if not isinstance(A, AbstractPSDMatrix):
         A = PSDMatrix(A)
     
@@ -24,7 +24,7 @@ def cholesky_helper(A, k, alg, stoptol = 0):
     # row ordering, is much faster for large scale problems
     G = np.zeros((k,n))
     rows = np.zeros((k,n))
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
     
     arr_idx = []
     
@@ -64,7 +64,7 @@ def _greedy_cholesky(A, rtol = None, atol = None):
         rank = np.argmax(trailing_sums < (atol + rtol * trace)) + 1
     return L, piv, rank
 
-def block_cholesky_helper(A, k, b, alg, stoptol = 1e-14, strategy = "regularize", rbrp_atol = 0.0, rbrp_rtol = "1/b"):
+def block_cholesky_helper(A, k, b, alg, stoptol = 1e-14, strategy = "regularize", rbrp_atol = 0.0, rbrp_rtol = "1/b", seed = None):
     if not isinstance(A, AbstractPSDMatrix):
         A = PSDMatrix(A)
     
@@ -81,7 +81,7 @@ def block_cholesky_helper(A, k, b, alg, stoptol = 1e-14, strategy = "regularize"
     G = np.zeros((k,n))
     rows = np.zeros((k,n))
     
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
 
     arr_idx = []
     
@@ -139,7 +139,7 @@ def block_cholesky_helper(A, k, b, alg, stoptol = 1e-14, strategy = "regularize"
 
     return PSDLowRank(G, idx = arr_idx, rows = rows)
 
-def rejection_cholesky(H):
+def rejection_cholesky(H, rng):
     b = H.shape[0]
     if H.shape[0] != H.shape[1]:
         raise RuntimeError("rejection_cholesky requires a square matrix")
@@ -157,7 +157,7 @@ def rejection_cholesky(H):
         if num_accepted > 0:
             H_jj -= np.sum(L[j, :num_accepted] ** 2)
 
-        if np.random.rand() * u[j] < H_jj:
+        if rng.random() * u[j] < H_jj:
             idx.append(j)
 
             col = H[j:, j].copy()
@@ -174,7 +174,7 @@ def rejection_cholesky(H):
 
 
 
-def accelerated_rpcholesky(A, k, b = "auto", stoptol = 1e-13, verbose=False):
+def accelerated_rpcholesky(A, k, b = "auto", stoptol = 1e-13, verbose=False, seed = None):
     if not isinstance(A, AbstractPSDMatrix):
         A = PSDMatrix(A)
     
@@ -194,7 +194,7 @@ def accelerated_rpcholesky(A, k, b = "auto", stoptol = 1e-13, verbose=False):
     G = np.zeros((k,n))
     rows = np.zeros((k,n))
     
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
     arr_idx = np.zeros(k, dtype=int)
     
     counter = 0
@@ -205,7 +205,7 @@ def accelerated_rpcholesky(A, k, b = "auto", stoptol = 1e-13, verbose=False):
             start = time()
         
         H = A[idx, idx] - G[0:counter,idx].T @ G[0:counter,idx]
-        L, accepted = rejection_cholesky(H)
+        L, accepted = rejection_cholesky(H, rng)
         num_sel = len(accepted)
 
         if num_sel > k - counter:
@@ -249,24 +249,24 @@ def accelerated_rpcholesky(A, k, b = "auto", stoptol = 1e-13, verbose=False):
 
     return PSDLowRank(G, idx = arr_idx, rows = rows)
 
-def rpcholesky(A, k, b = None, accelerated = True, **kwargs):
+def rpcholesky(A, k, b = None, accelerated = True, seed = None, **kwargs):
     if b is None:
         if accelerated:
-            return accelerated_rpcholesky(A, k, **kwargs)
+            return accelerated_rpcholesky(A, k, seed = seed, **kwargs)
         else:
-            return cholesky_helper(A, k, 'rp', **kwargs)
+            return cholesky_helper(A, k, 'rp', seed = seed, **kwargs)
     elif accelerated:
-        return accelerated_rpcholesky(A, k, b, **kwargs)
+        return accelerated_rpcholesky(A, k, b, seed = seed, **kwargs)
     else:
-        return block_cholesky_helper(A, k, b, 'rp', **kwargs)
+        return block_cholesky_helper(A, k, b, 'rp', seed = seed, **kwargs)
 
-def greedy(A, k, randomized_tiebreaking = False, b = 1, **kwargs):
+def greedy(A, k, randomized_tiebreaking = False, b = 1, seed = None, **kwargs):
     if b == 1:
-        return cholesky_helper(A, k, 'rgreedy' if randomized_tiebreaking else 'greedy', **kwargs)
+        return cholesky_helper(A, k, 'rgreedy' if randomized_tiebreaking else 'greedy', seed = seed, **kwargs)
     else:
         if randomized_tiebreaking:
             warn("Randomized tiebreaking not implemented for block greedy method")
-        return block_cholesky_helper(A, k, b, 'greedy', **kwargs)
+        return block_cholesky_helper(A, k, b, 'greedy', seed = seed, **kwargs)
 
 def simple_rpcholesky(A, k, **kwargs):
     return rpcholesky(A, k, b = None, accelerated = False, **kwargs)
@@ -274,5 +274,5 @@ def simple_rpcholesky(A, k, **kwargs):
 def block_rpcholesky(A, k, b = 100, **kwargs):
     return block_cholesky_helper(A, k, b, 'rp', **kwargs)
 
-def block_greedy(A, k, b = 100, stoptol = None):
+def block_greedy(A, k, b = 100, **kwargs):
     return block_cholesky_helper(A, k, b, 'greedy', **kwargs)

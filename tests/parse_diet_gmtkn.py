@@ -2,8 +2,6 @@ import yaml
 
 from tests.reaction import Reaction, MolInfo, Educt, Product
 
-KCALPERMOL_PER_HARTREE = 627.509_474
-
 def parse_yaml_to_reactions(file: str) -> list[Reaction]:
     yaml_content = ""
     with open(file, 'r') as f:

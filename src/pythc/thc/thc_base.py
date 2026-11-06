@@ -5,11 +5,10 @@ from typing import Literal
 import h5py
 import numpy as np
 
+from pythc._tracking import Configurable, observe
 import pythc.lib as lib
-from pythc.configurable import Configurable
-from pythc.tracking.experiment_run import ExperimentRun
 
-type Mode = Literal['ao', 'ov', 'oo', 'vv', 'ia']
+type Mode = Literal['ao', 'ov', 'oo', 'vv', 'pr']
 
 
 class ERI(ABC):
@@ -38,20 +37,18 @@ class ERI(ABC):
         pass
 
 
-class ThcEri(ERI):
+class THC_ERI(ERI):
     def __init__(self, nelectron: int, X: np.ndarray, Z: np.ndarray, D: np.ndarray = None):
         self.nelectron = nelectron
         self.X = X  # (N^2, M)
         self.Z = Z  # (M, M)
         self.D = D # (M, n_aux)
 
-        active = ExperimentRun.get_active()
-        if active:
-            active.log_metric("n_thc", X.shape[0])
+        observe.log_metric("n_thc", X.shape[0])
 
 
     @classmethod
-    def from_file(cls, path: str | Path) -> "ThcEri":
+    def from_file(cls, path: str | Path) -> "THC_ERI":
         """
         Construct ThcEri directly from an HDF5 file,
         automatically retrieving nelectron from metadata.
@@ -69,7 +66,6 @@ class ThcEri(ERI):
             f.create_dataset('X', data=self.X)
             f.create_dataset('Z', data=self.Z)
             f.attrs['nelectron'] = self.nelectron
-
 
     def get_X_Z(self):
         return self.X, self.Z
@@ -101,7 +97,7 @@ class ThcEri(ERI):
         self.Z = lib.to_backend(self.Z)
 
 
-class ThcEriUnrestricted(ERI):
+class THC_ERI_Unrestricted(ERI):
     def get_X_Z(self):
         return self.X_alpha, self.X_beta, self.Z_aa, self.Z_bb, self.Z_ab
 
@@ -111,6 +107,31 @@ class ThcEriUnrestricted(ERI):
     def get_full(self):
         pass
 
+    def save(self, path: str):
+        with h5py.File(path, 'w') as f:
+            f.create_dataset('X_alpha', data=self.X_alpha)
+            f.create_dataset('X_beta', data=self.X_beta)
+            f.create_dataset('Z_aa', data=self.Z_aa)
+            f.create_dataset('Z_bb', data=self.Z_bb)
+            f.create_dataset('Z_ab', data=self.Z_ab)
+            f.attrs['nelectron'] = self.nelectron
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> "THC_ERI_Unrestricted":
+        """
+        Construct ThcEri directly from an HDF5 file,
+        automatically retrieving nelectron from metadata.
+        """
+        with h5py.File(path, 'r') as f:
+            X_alpha = f['X_alpha'][:]
+            X_beta = f['X_beta'][:]
+            Z_aa = f['Z_aa'][:]
+            Z_bb = f['Z_bb'][:]
+            Z_ab = f['Z_ab'][:]
+            nelectron = f.attrs.get('nelectron', 0)
+
+        return cls(nelectron=int(nelectron), X_alpha=X_alpha, X_beta=X_beta, Z_aa=Z_aa, Z_bb=Z_bb, Z_ab=Z_ab)
+
     def __init__(self, nelectron, X_alpha, X_beta, Z_aa, Z_bb, Z_ab):
         self.nelectron = nelectron
         self.X_alpha = X_alpha
@@ -119,11 +140,9 @@ class ThcEriUnrestricted(ERI):
         self.Z_bb = Z_bb
         self.Z_ab = Z_ab
 
-        active = ExperimentRun.get_active()
-        if active:
-            X_a_len = X_alpha.shape[0]
-            X_b_len = X_beta.shape[0]
-            active.log_metric("n_thc", max(X_a_len, X_b_len))
+        X_a_len = X_alpha.shape[0]
+        X_b_len = X_beta.shape[0]
+        observe.log_metric("n_thc", max(X_a_len, X_b_len))
 
     def to_backend(self):
         self.X_alpha = lib.to_backend(self.X_alpha)
@@ -138,9 +157,9 @@ class THC(ABC, Configurable):
         self.mo_coeff = mo_coeff
 
     @abstractmethod
-    def build(self) -> ThcEri:
+    def build(self, mode: Mode) -> THC_ERI:
         pass
 
     @abstractmethod
-    def build_unrestricted(self) -> ThcEriUnrestricted:
+    def build_unrestricted(self, mode: Mode) -> THC_ERI_Unrestricted:
         pass

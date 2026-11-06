@@ -2,8 +2,8 @@ name: pythc
 channels:
   - conda-forge
 dependencies:
-  - python=3.11
+  - python=3.12
   - uv
-  - numpy<2.5.0
-  - scipy
-  - libblas=*=*mkl
+  - numpy>=2.2.5,<2.6.0
+  - scipy>=1.15.2,<2.0.0
+  - libblas=*=*openblas
