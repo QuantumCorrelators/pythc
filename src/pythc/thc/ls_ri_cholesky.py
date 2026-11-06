@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import numpy as np
 import scipy as sp
@@ -30,23 +31,21 @@ class LS_RI_Cholesky(THC):
 
     def __init__(self,
                  mol: gto.Mole,
-                 grid: GridProvider = None,
-                 mo_coeff: np.ndarray = None,
-                 auxbasis: str = None,
-                 cholesky_decomp: Cholesky = None,
+                 auxbasis: Optional[str] = None,
+                 grid: Optional[GridProvider] = None,
+                 mo_coeff: Optional[np.ndarray] = None,
+                 cholesky_decomp: Optional[Cholesky] = None,
                  cholesky_threshold: float = 1e-5,
-                 symmetry: str = 's2',
-                 seed: int | None = None):
+                 seed: Optional[int] = None):
 
         super().__init__()
         self.mol = mol
         self.N = mol.nao_nr()
+
         self.auxbasis = auxbasis if auxbasis is not None else f'{self.mol.basis}-ri'
         self.cholesky_decomp = cholesky_decomp if cholesky_decomp is not None else AccelRPCholesky(seed=seed)
         self.cholesky_threshold = cholesky_threshold
         self.grid = grid if grid is not None else BeckeGrid(mol)
-        self.mol = mol
-        self.symmetry = symmetry
         self.mo_coeff = mo_coeff if mo_coeff is not None and len(mo_coeff) > 0 else np.eye(mol.nao_nr())
 
     def build(self, mode: Mode = "ao") -> THC_ERI:
@@ -99,7 +98,6 @@ class LS_RI_Cholesky(THC):
         L, piv, num_rank = self.cholesky_decomp.decompose(A, n_grid, self.cholesky_threshold)
         piv = piv[:num_rank]
         L = L[:, piv]
-        self.pruned_grid = grid[piv]
 
         X_pruned = X[piv, :]
 

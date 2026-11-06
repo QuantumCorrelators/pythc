@@ -5,7 +5,6 @@ from pyscf import gto
 from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
 
 from pythc.methods import scfdd
-from pythc.thc.ls_aux_becke import LS_Aux_Becke
 
 logging.basicConfig(
     stream=sys.stdout, level=logging.INFO,

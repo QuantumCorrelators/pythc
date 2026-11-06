@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from pyscf import gto, scf, df
+from pyscf import gto, scf
 
 from pythc.methods.scf import THCDF
 from pythc.thc.ls_snri_cholesky import LS_snRI_Cholesky

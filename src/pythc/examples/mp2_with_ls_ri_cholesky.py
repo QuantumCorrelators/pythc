@@ -32,8 +32,7 @@ def main():
     mf = mf.density_fit(auxbasis=auxbasis)
     mf.kernel()
 
-    thc = LS_RI_Cholesky(mol=mol, auxbasis=auxbasis, mo_coeff=mf.mo_coeff,
-                         cholesky_threshold=1e-5)
+    thc = LS_RI_Cholesky(mol=mol, auxbasis=auxbasis, cholesky_threshold=1e-5)
 
     mp2_ref = DFMP2(mf).kernel()[0]
     print(f'MP2 RI Reference: {mp2_ref}')

@@ -70,7 +70,7 @@ class CompactEigenvalueDecomposition(AbstractPSDLowRank):
         return self.V @ (self.Lambda * (self.V.T @ other))
 
     def rank(self):
-        return len(S)
+        return len(self.Lambda)
 
     def matrix(self):
         return self.V @ (self.Lambda * self.V.T)

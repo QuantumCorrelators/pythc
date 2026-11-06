@@ -4,6 +4,8 @@ import pytest
 from pyscf import gto
 
 from pythc.const import KCALPERMOL_PER_HARTREE
+from pythc.grid import BeckeGrid
+from pythc.methods.mp2 import LaplaceMP2, LaplaceUMP2
 from tests.parse_diet_gmtkn import parse_yaml_to_reactions
 from tests.thc_helpers import (
     AUXBASIS,
@@ -13,13 +15,10 @@ from tests.thc_helpers import (
     build_auxbasis,
     build_mol,
     default_mp2_grid,
-    df_mp2_corr,
     df_scf,
     make_thc_mo,
     thc_mp2_corr, BASIS, df_mp2_corr_laplace,
 )
-from pythc.grid import BeckeGrid
-from pythc.methods.mp2 import LaplaceMP2, LaplaceUMP2
 
 logger = logging.getLogger(__name__)
 

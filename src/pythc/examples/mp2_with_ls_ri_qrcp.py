@@ -34,8 +34,7 @@ def main():
     mf.kernel()
 
 
-    thc = LS_RI_QRCP(mol=mol, auxbasis=auxbasis, mo_coeff=mf.mo_coeff,
-                     tolerance=1e-4)
+    thc = LS_RI_QRCP(mol=mol, auxbasis=auxbasis, tolerance=1e-4)
 
     mp2_ref = DFMP2(mf).kernel()
     print(f'MP2 RI Reference: {mp2_ref}')

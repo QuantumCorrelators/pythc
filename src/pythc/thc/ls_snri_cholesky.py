@@ -227,7 +227,3 @@ class LS_snRI_Cholesky(THC):
         A = sp.linalg.solve_triangular(L.T, Y.T, lower=True)
         B = sp.linalg.solve_triangular(L, A, lower=False)
         return B
-
-
-    def prune_grid_ao(self, X: np.ndarray, n_grid: int, n_occ: int) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        return self.prune_grid(X, n_grid, n_occ, is_ao=True)

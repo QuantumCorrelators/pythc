@@ -1,10 +1,9 @@
 import logging
-from typing import Optional
 
 import numba as nb
 import numpy as np
 import pyscf.lib as pyscflib
-from pyscf import df, gto, ao2mo
+from pyscf import df, gto
 
 from pythc import lib
 from pythc.thc.checkpoints import METRIC_INVERSION
@@ -15,41 +14,6 @@ logger = logging.getLogger()
 
 def eval_basefuncs(mol: gto.Mole, coords: np.ndarray):
     return mol.eval_gto('GTOval_sph', coords=coords)
-
-def get_reference_eri(mol: gto.Mole, nelec: int, mo_coeff: Optional[np.ndarray]) -> np.ndarray:
-    if len(mo_coeff) > 0:
-        eri = ao2mo.kernel(mol, mo_coeff, compact=False)
-    else:
-        eri = ao2mo.kernel(mol, np.eye(nelec), compact=False)
-
-    return eri
-
-@nb.njit(parallel=True, fastmath=True, cache=True)
-def build_codensity_kernel_tril(X_block, n, out):
-    n_grid = X_block.shape[0]
-
-    for g in nb.prange(n_grid):
-        k = 0
-        for i in range(n):
-            val_i = X_block[g, i]
-            for j in range(i + 1):
-                out[g, k] = val_i * X_block[g, j]
-                k += 1
-
-
-@nb.njit(parallel=True, fastmath=True, cache=True)
-def build_codensity_kernel_rect(X_block, n_occ, n_vir, out):
-    n_grid = X_block.shape[0]
-    n_total = n_occ + n_vir
-
-    for g in nb.prange(n_grid):
-        k = 0
-        for i in range(n_occ):
-            val_i = X_block[g, i]
-            for j in range(n_occ, n_total):
-                out[g, k] = val_i * X_block[g, j]
-                k += 1
-
 
 @nb.jit(parallel=True, fastmath=True, cache=True)
 def build_S_ov_block(X, n_occ, S):
@@ -226,19 +190,6 @@ def build_coulomb_matrix_asym(mode: Mode, mol: gto.Mole, auxmol: gto.Mole, X_alp
     Z_ab = D_aa.T @ D_bb
 
     return Z_aa, Z_bb, Z_ab
-
-def contract_codensity_sri_eri(mode: Mode, X: np.ndarray, mo_coeff: np.ndarray, auxmol, S_Lg, j2c_inv, grid, weights,):
-    logger.info("building fakemol and 2c1e grid-auxiliary integrals")
-    fakemol = gto.fakemol_for_charges(grid)
-    int2c2e_gM = gto.intor_cross('int2c2e', fakemol, auxmol)
-    B_gM = int2c2e_gM @ j2c_inv
-
-    B_gM = B_gM * np.sqrt(weights)[:, np.newaxis]
-
-    Y = S_Lg @ B_gM  # Shape: (num_rank, n_aux)
-
-    return Y
-
 
 def contract_codensity_df_eri(mode: Mode, X, mo_coeff, mol, auxmol, j2c_inv, n_occ, n_vir):
     p, n = X.shape

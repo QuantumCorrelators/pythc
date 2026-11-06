@@ -11,7 +11,7 @@ from pyscf.scf.uhf import UHF as PyscfUHF
 
 from pythc.methods.scf import THCDF
 from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
-from pythc.thc.thc_base import THC_ERI, THC
+from pythc.thc.thc_base import THC
 
 logger = logging.getLogger()
 
@@ -120,6 +120,13 @@ class DensityDifferenceSCF:
         raise NotImplementedError
 
 class RHF(DensityDifferenceSCF, PyscfRHF):
+    """Restricted HF with the THC density-difference ansatz.
+
+    Drop-in replacement for :class:`pyscf.scf.hf.RHF`: an exact DF baseline
+    is built for the first ``min_df_cycles`` cycles, then the THC engine
+    takes over on the density difference once ``e_diff < thc_threshold``
+    (see :class:`DensityDifferenceSCF`).
+    """
     def __init__(self, mol: gto.Mole, thc: Optional[THC] = None, auxbasis: Optional[str] = None,
                  verbose: int = 0,
                  min_df_cycles: int = 1,
@@ -143,6 +150,12 @@ class RHF(DensityDifferenceSCF, PyscfRHF):
         return self.with_df.get_jk(np.asarray(dm), hermi, with_j, with_k)
 
 class UHF(DensityDifferenceSCF, PyscfUHF):
+    """Unrestricted HF with the THC density-difference ansatz.
+
+    See :class:`RHF` / :class:`DensityDifferenceSCF`; spin channels are
+    combined per the UHF Fock build (J is linear over both spins, K is
+    per-spin).
+    """
     def __init__(self, mol: gto.Mole, thc: Optional[THC] = None, auxbasis: Optional[str] = None,
                  verbose: int = 4,
                  min_df_cycles: int = 0,
@@ -182,6 +195,11 @@ class UHF(DensityDifferenceSCF, PyscfUHF):
 
 
 class GHF(DensityDifferenceSCF, PyscfGHF):
+    """Generalized HF with the THC density-difference ansatz.
+
+    See :class:`RHF` / :class:`DensityDifferenceSCF`; densities and J/K are
+    handled in spin-orbital form, like stock :class:`pyscf.scf.ghf.GHF`.
+    """
     def __init__(self, mol: gto.Mole, thc: Optional[THC] = None, auxbasis: Optional[str] = None,
                  verbose: int = 0,
                  min_df_cycles: int = 0,

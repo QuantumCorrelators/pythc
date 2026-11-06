@@ -257,11 +257,3 @@ class LS_Aux_Becke(THC):
         return D_T.T
 
 
-class LSTHC_AuxCoulomb_Cholesky(LS_Aux_Becke):
-    @classmethod
-    def __str__(cls):
-        return "cd_df_ls_thc"
-
-    prune = True
-
-

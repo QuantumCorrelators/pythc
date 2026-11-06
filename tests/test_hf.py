@@ -4,11 +4,12 @@ import numpy as np
 import pytest
 from pyscf import gto, df, scf
 
+from pythc.const import KCALPERMOL_PER_HARTREE
 from pythc.decomp.cholesky import build_cholesky_decomp
+from pythc.grid import BeckeGrid, zone_prune
 from pythc.methods import scf as scfthc
 from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
 from tests.parse_diet_gmtkn import parse_yaml_to_reactions
-from pythc.const import KCALPERMOL_PER_HARTREE
 from tests.thc_helpers import (
     AO_NAMES,
     AO_THRESHOLDS,
@@ -16,9 +17,7 @@ from tests.thc_helpers import (
     MOL_FILES,
     build_auxbasis,
     build_mol,
-    thc_hf_energy_density_difference, BASIS, thc_hf_energy, MOL_FILES_HEAVY,
-)
-from pythc.grid import BeckeGrid, zone_prune
+    thc_hf_energy_density_difference, BASIS, thc_hf_energy, )
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +69,8 @@ def test_cholesky_random_vs_greedy(mol_file):
     decomp_greedy = build_cholesky_decomp("greedy", seed=42, block_size=8)
     decomp_accel = build_cholesky_decomp("accel", seed=42, block_size=8)
 
-    thc_greedy = LS_RI_Cholesky(mol, BeckeGrid(mol, level=0), cholesky_threshold=1e-8, cholesky_decomp=decomp_greedy)
-    thc_accel = LS_RI_Cholesky(mol, BeckeGrid(mol, level=0), cholesky_threshold=1e-8, cholesky_decomp=decomp_accel)
+    thc_greedy = LS_RI_Cholesky(mol, grid=BeckeGrid(mol, level=0), cholesky_threshold=1e-8, cholesky_decomp=decomp_greedy)
+    thc_accel = LS_RI_Cholesky(mol, grid=BeckeGrid(mol, level=0), cholesky_threshold=1e-8, cholesky_decomp=decomp_accel)
 
     mf_greedy = scf.UHF(mol) if mol.spin > 0 else scf.RHF(mol)
     mf_greedy = mf_greedy.density_fit(with_df=scfthc.THCDF(mol, thc_greedy, AUXBASIS))

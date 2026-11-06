@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from pythc.decomp.acccholesky.lra import PSDLowRank
 from pythc.decomp.acccholesky.matrix import FunctionMatrix
-from pythc.decomp.acccholesky.rpcholesky import rpcholesky, greedy, block_greedy
+from pythc.decomp.acccholesky.rpcholesky import rpcholesky, greedy
 
 from pythc import lib
 from pythc._tracking import Configurable
@@ -34,9 +34,6 @@ class SymMetricOV(FunctionMatrix):
     def _function_vec(self, vec_i, vec_j):
         return (self.A[vec_i] @ self.A[vec_j].T) * (self.B[vec_i] @ self.B[vec_j].T)
 
-    def _get_row(self, i):
-        return (self.A[i] @ self.A.T) * (self.B[i] @ self.B.T)
-
     def _function_mtx(self, I, J):
         sub = (self.A[I] @ self.A[J].T) * (self.B[I] @ self.B[J].T)
         return sub
@@ -59,7 +56,6 @@ class GramMetric(FunctionMatrix):
         self.X = X
         self.n, self.p = X.shape
         self.S = {}
-        self._access_order = []  # For LRU cache management
         self._diag_values = None
 
         super().__init__(self.n)
@@ -70,9 +66,6 @@ class GramMetric(FunctionMatrix):
 
     def _function_vec(self, vec_i, vec_j):
         return self.X[vec_i] @ self.X[vec_j].T
-
-    def _get_row(self, i):
-        return self.X[i] @ self.X.T
 
     def _function_mtx(self, vec_i, vec_j):
         X_i = self.X[vec_i]
@@ -96,7 +89,6 @@ class SymMetric(FunctionMatrix):
         self.X = X
         self.n, self.p = X.shape
         self.S = {}
-        self._access_order = []  # For LRU cache management
         self._diag_values = None
 
         super().__init__(self.n)
@@ -107,9 +99,6 @@ class SymMetric(FunctionMatrix):
 
     def _function_vec(self, vec_i, vec_j):
         return (self.X[vec_i] @ self.X[vec_j].T) ** 2
-
-    def _get_row(self, i):
-        return (self.X[i] @ self.X.T) ** 2
 
     def _function_mtx(self, vec_i, vec_j):
         X_i = self.X[vec_i]

@@ -91,10 +91,26 @@ def thc_rpa(mf: SCF, eri_thc: THC_ERI):
     return E_corr
 
 class RPA:
+    """Direct-RPA correlation energy from a THC factorization.
+
+    Args:
+        mf: converged PySCF (R)HF mean-field object.
+        thc: THC factorization to use; if ``None``, defaults to
+            :class:`LS_RI_Cholesky` with ``cholesky_threshold=1e-5``.
+
+    The THC ERI is built in ``mode='ov'`` on :meth:`kernel`, which evaluates
+    the RPA correlation energy via the plasmon/coupled-cluster-like
+    frequency-integrated trace formula (:func:`thc_rpa`).
+    """
     def __init__(self, mf: SCF, thc: Optional[THC]):
         self.mol = mf.mol
         self.mf = mf
-        self.thc = thc if thc else LS_RI_Cholesky(self.mol, mo_coeff=self.mf.mo_coeff, cholesky_threshold=1e-5)
+        if thc is None:
+            self.thc = LS_RI_Cholesky(self.mol, mo_coeff=self.mf.mo_coeff, cholesky_threshold=1e-5)
+        else:
+            self.thc = thc
+            self.thc.with_mo_coeff(mf.mo_coeff)
+
 
     def kernel(self):
         eri = self.thc.build(mode='ov')

@@ -33,7 +33,7 @@ def main():
     mf.verbose = 4
     mf.kernel()
 
-    thc = LS_Aux_Becke(mol=mol, fit_auxbasis='cc-pvdz', mo_coeff=mf.mo_coeff)
+    thc = LS_Aux_Becke(mol=mol, fit_auxbasis='cc-pvdz')
 
     mp2_ref = DFMP2(mf).kernel()
     print(f'MP2 RI Reference: {mp2_ref}')

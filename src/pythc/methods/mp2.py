@@ -13,7 +13,6 @@ from pyscf.scf.hf import SCF
 import pythc.lib as lib
 from pythc._tracking import observe
 from pythc.thc.ls_ri_cholesky import LS_RI_Cholesky
-from pythc.thc.ls_snri_cholesky import LS_snRI_Cholesky
 from pythc.thc.thc_base import ERI, THC_ERI, THC
 from pythc.thc.thc_base import THC_ERI_Unrestricted
 
@@ -831,10 +830,19 @@ def mp2_energy(mol: gto.Mole, mf: SCF, eri_thc: ERI) -> float:
     return mp2_e
 
 class MP2:
+    """Conventional (non-Laplace) closed-shell THC-MP2.
+
+    Builds the THC ERI in ``mode='ov'`` and evaluates the MP2 energy via the
+    explicit occupied-virtual amplitude contraction (:func:`mp2_energy`).
+    """
     def __init__(self, mf: SCF, thc: Optional[THC] = None):
         self.mf = mf
         self.mol = mf.mol
-        self.thc = thc if thc else LS_snRI_Cholesky(self.mol, cholesky_threshold=1e-9)
+        if thc is None:
+            self.thc = LS_RI_Cholesky(self.mol, mo_coeff=mf.mo_coeff, cholesky_threshold=1e-5)
+        else:
+            self.thc = thc
+            self.thc.with_mo_coeff(mf.mo_coeff)
 
     def kernel(self) -> tuple[float,...]:
         eri = self.thc.build(mode='ov')
@@ -842,51 +850,72 @@ class MP2:
         return (mp2_energy(self.mol, self.mf, eri),)
 
 class LaplaceMP2:
-    def __init__(self, mf: SCF, thc: Optional[THC] = None, n_laplace : int = 10, jc: Optional[float] = None, kc: Optional[float] = None):
+    """Closed-shell THC-MP2 via a Laplace-transformed energy denominator.
+
+    Args:
+        mf: converged PySCF (R)HF mean-field object.
+        thc: THC factorization to use; if ``None``, defaults to
+            :class:`LS_RI_Cholesky` with ``cholesky_threshold=1e-5``.
+        n_laplace: number of Laplace quadrature points.
+
+    The THC ERI is built in ``mode='ov'`` on :meth:`kernel`.
+    """
+    def __init__(self,
+                 mf: SCF,
+                 thc: Optional[THC] = None,
+                 n_laplace: int = 10):
         self.mf = mf
         self.mol = mf.mol
-        self.thc = thc if thc else LS_snRI_Cholesky(self.mol, cholesky_threshold=1e-5)
+        if thc is None:
+            self.thc = LS_RI_Cholesky(self.mol, mo_coeff=mf.mo_coeff, cholesky_threshold=1e-5)
+        else:
+            self.thc = thc
+            self.thc.with_mo_coeff(mf.mo_coeff)
         self.n_laplace = n_laplace
-        self.jc, self.kc = jc, kc
+
+    mp2_e = staticmethod(mp2_energy_laplace)
+    jc = 2.0
+    kc = 1.0
 
     def kernel(self) -> tuple[float,...]:
         eri = self.thc.build(mode='ov')
         observe.checkpoint("thc_build")
-        return mp2_energy_laplace(self.mol, self.mf, eri, self.n_laplace)
+        return self.mp2_e(mol=self.mol,
+                          mf=self.mf,
+                          thc=eri,
+                          n_laplace=self.n_laplace,
+                          jc=self.jc,
+                          kc=self.kc)
 
-class LaplaceSOSMP2:
-    def __init__(self, mf: SCF, thc: Optional[THC] = None, n_laplace : int = 10, jc: Optional[float] = None, kc: Optional[float] = None):
-        self.mf = mf
-        self.mol = mf.mol
-        self.thc = thc if thc else LS_snRI_Cholesky(self.mol, cholesky_threshold=1e-5)
-        self.n_laplace = n_laplace
-        self.jc, self.kc = jc, kc
+class LaplaceSOSMP2(LaplaceMP2):
+    """Scaled-opposite-spin (SOS) variant of :class:`LaplaceMP2` (``jc=1.3``, ``kc=0.0``)."""
+    jc = 1.3
+    kc = 0.0
 
-    def kernel(self) -> tuple[float,...]:
-        eri = self.thc.build(mode='ov')
-        observe.checkpoint("thc_build")
-        return mp2_energy_laplace(self.mol, self.mf, eri, self.n_laplace, jc=1.3, kc=0.0)
+class LaplaceUMP2(LaplaceMP2):
+    """Unrestricted THC-MP2 via a Laplace-transformed energy denominator.
 
-class LaplaceUMP2:
-    def __init__(self, mf: SCF, thc: Optional[THC] = None, n_laplace : int = 10):
-        self.mf = mf
-        self.mol = mf.mol
-        self.thc = thc if thc else LS_RI_Cholesky(self.mol, mo_coeff=mf.mo_coeff, cholesky_threshold=1e-5)
-        self.n_laplace = n_laplace
+    See :class:`LaplaceMP2`; the THC ERI is built unrestricted
+    (:meth:`THC.build_unrestricted`) and the spin channels are combined
+    with same-spin/opposite-spin coefficients ``aac``/``bbc``/``abc``.
+    """
+    mp2_e = staticmethod(ump2_energy_laplace)
 
-    def kernel(self) -> tuple[float,...]:
-        eri = self.thc.build_unrestricted(mode='ov')
-        observe.checkpoint("thc_build")
-        return ump2_energy_laplace(self.mol, self.mf, eri, self.n_laplace)
-
-class LaplaceSOSUMP2:
-    def __init__(self, mf: SCF, thc: Optional[THC] = None, n_laplace : int = 10):
-        self.mf = mf
-        self.mol = mf.mol
-        self.thc = thc if thc else LS_RI_Cholesky(self.mol, mo_coeff=mf.mo_coeff, cholesky_threshold=1e-5)
-        self.n_laplace = n_laplace
+    aac = 0.5
+    bbc = 0.5
+    abc = 1.0
 
     def kernel(self) -> tuple[float,...]:
         eri = self.thc.build_unrestricted(mode='ov')
         observe.checkpoint("thc_build")
-        return ump2_energy_laplace(self.mol, self.mf, eri, self.n_laplace, aac=0.0, bbc=0.0, abc=1.3)
+        return self.mp2_e(mol=self.mol,
+                          mf=self.mf,
+                          thc=eri,
+                          n_laplace=self.n_laplace,
+                          aac=self.aac, bbc=self.bbc, abc=self.abc)
+
+class LaplaceSOSUMP2(LaplaceUMP2):
+    """Scaled-opposite-spin (SOS) variant of :class:`LaplaceUMP2`."""
+    aac = 0.0
+    bbc = 0.0
+    abc = 1.3

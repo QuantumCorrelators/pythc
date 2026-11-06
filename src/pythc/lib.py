@@ -1,8 +1,6 @@
 import importlib.util
-import json
 import logging
 import os
-import subprocess
 from typing import Optional
 
 import cotengra as ctg
@@ -11,7 +9,6 @@ import opt_einsum as oe
 import psutil
 import pyscf.lib as pyscflib
 import pytblis as pt
-from pyscf import df
 
 logger = logging.getLogger()
 
@@ -441,19 +438,6 @@ def latest_tag() -> str:
 
     return latest_tag.name
 
-def get_l3_cache_size_bytes() ->int:
-    result = subprocess.run(['lscpu', '-J', '--bytes'],
-                            capture_output=True, text=True, check=True)
-    data = json.loads(result.stdout)
-
-    for item in data.get('lscpu', []):
-        field = item.get('field', '').lower().strip()
-        # Accounts for "L3 cache:" or "L3:" depending on the lscpu version
-        if 'l3 cache' in field or field == 'l3:':
-            return int(item.get('data', 0).split(" ")[0])
-
-    return 64 * 1024**2
-
 def pyscf_max_memory():
     """PySCF max_memory in MB, honouring the env overrides set on clusters.
 
@@ -593,10 +577,4 @@ def to_backend(*inputs, dtype=None):
     if return_single:
         return out_arrays[0]
     return tuple(out_arrays)
-
-def get_dfo(mol, auxbasis):
-    dfo = df.DF(mol, auxbasis=auxbasis)
-    dfo.build()
-
-    return dfo
 

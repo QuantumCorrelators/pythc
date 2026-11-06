@@ -4,7 +4,7 @@ import sys
 from pyscf import gto, scf
 from pyscf.mp.dfmp2 import DFMP2
 
-from pythc.methods.mp2 import mp2_energy_laplace, LaplaceMP2
+from pythc.methods.mp2 import LaplaceMP2
 from pythc.thc.ls_ri_becke import LS_RI_Becke
 
 logging.basicConfig(
@@ -33,7 +33,7 @@ def main():
     mf.verbose = 4
     mf.kernel()
 
-    thc = LS_RI_Becke(mol=mol, auxbasis=auxbasis, mo_coeff=mf.mo_coeff)
+    thc = LS_RI_Becke(mol=mol, auxbasis=auxbasis)
 
     mp2_ref = DFMP2(mf).kernel()[0]
     print(f'MP2 RI Reference: {mp2_ref}')

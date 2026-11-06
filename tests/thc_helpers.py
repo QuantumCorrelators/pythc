@@ -16,15 +16,11 @@ from pyscf.lib.exceptions import BasisNotFoundError
 from pyscf.mp.dfmp2 import DFRMP2
 from pyscf.mp.dfump2 import DFUMP2
 
-from pythc import const
-from pythc.decomp.cholesky import AccelRPCholesky
 from pythc.df.laplace_mp2 import LaplaceDFUMP2, LaplaceDFMP2
 from pythc.grid import BeckeGrid
 from pythc.methods import scfdd
 from pythc.methods import scf as scfthc
 
-from pythc.methods.scfdd import RHF as THCRHF
-from pythc.methods.scfdd import UHF as THCUHF
 from pythc.methods.mp2 import (
     LaplaceMP2,
     LaplaceSOSMP2,

@@ -120,11 +120,9 @@ From those objects, we can build the THC representation by importing the appropr
 
 ```python
 from pythc.thc.ls_ri_becke import LS_RI_Becke
-from pythc.grid import BeckeGrid
 
-grid_builder = BeckeGrid(mol)
-thc_builder = LS_RI_Becke(mol=mol, grid=grid_builder, auxbasis='cc-pvdz-ri')
-thc_eri = thc_builder.build(mode='ao')
+thc = LS_RI_Becke(mol=mol, auxbasis='cc-pvdz-ri')
+thc_eri = thc.build(mode='ao')
 ```
 Supported modes are `ao` for the AO-ERI $(\mu \nu|\lambda \sigma)$ and `ov` for the occupied-virtual block if the MO-ERI $(i j|a b)$.
 The THC representation **must** be built in `mode='ao'` for the HF-SCF calculation.
@@ -165,54 +163,64 @@ With this THC ERI interface, you can implement improved quantum chemistry algori
 2. Møller-Plesset Perturbation Theory of 2nd order
 3. Random Phase Approximation (RPA)
 
-The THC J/K engine is `THCDF` (`pythc.methods.thc_df`), which implements the `pyscf.df.DF` interface and can be dropped into any stock PySCF SCF via `with_df`. Spin-block splitting (UHF/GHF) and the RHF/UHF/GHF Fock factors then stay in PySCF. We build in `ao` mode so the THC does not need to be rebuilt between SCF iterations:
+The THC J/K engine  (`pythc.methods.scf`), which implements the `pyscf.df.DF` interface and can be dropped into any stock PySCF SCF via `with_df`. Spin-block splitting (UHF/GHF) and the RHF/UHF/GHF Fock factors then stay in PySCF. The THC ERI is automatically built in `ao` mode so the THC does not need to be rebuilt between SCF iterations:
 
 ```python
 from pyscf import scf
-from pythc.grid import BeckeGrid
 from pythc.thc.ls_ri_becke import LS_RI_Becke
 from pythc.methods.scf import THCDF
 
 auxbasis = 'cc-pvdz-ri'
-grid_builder = BeckeGrid(mol)
-thc_builder = LS_RI_Becke(mol=mol, grid=grid_builder, auxbasis=auxbasis)
-thc_eri = thc_builder.build(mode='ao')
-
-mf = scf.RHF(mol).density_fit(with_df=THCDF(mol, thc_eri, auxbasis=auxbasis))
+thc = LS_RI_Becke(mol=mol, auxbasis=auxbasis)
+dfo = THCDF(mol, thc, auxbasis=auxbasis)
+mf = scf.RHF(mol).density_fit(with_df=dfo)
 mf.kernel()
 ```
 
-`density_fit` re-classes the SCF object so that `get_jk` routes through `with_df`; passing `with_df` directly avoids building a throwaway DF object.
+`density_fit` re-classes the SCF object so that `get_jk` routes through `with_df`; passing `with_df` directly avoids building a throwaway DF object. The same `dfo` can be dropped into `scf.UHF(mol)` or `scf.GHF(mol)` in place of `scf.RHF(mol)`; spin-block splitting and the RHF/UHF/GHF Fock factors stay in PySCF.
 
 Each of J and K can independently be routed to THC or to conventional DF/RI via the `with_j_thc` / `with_k_thc` flags. In particular `with_j_thc=False` selects "only-K" mode (Coulomb through DF/RI, exchange through THC):
 
 ```python
-mf.with_df = THCDF(mol, thc_eri, auxbasis=auxbasis, with_j_thc=False)
+dfo = THCDF(mol, thc, auxbasis=auxbasis, with_j_thc=False, with_k_thc=True)
 ```
 
-For an exact-DF baseline that switches to the THC density-difference ansatz after the first SCF cycle, use the `THC_RHF` / `THC_UHF` / `THC_GHF` wrappers from `pythc.methods.hf` (same constructor arguments plus the `with_j_thc` / `with_k_thc` flags):
-
+For an exact-DF baseline that switches to the THC density-difference ansatz after a certain threshold in the energy difference it reached, use the `RHF`, `UHF` and `GHF`  implementations from `pythc.methods.scfdd`:
 ```python
-from pythc.methods.scfdd import RHF
+from pythc.methods import scfdd
 
-mf = RHF(mol, thc_eri, auxbasis, verbose=4)
+mf = scfdd.RHF(mol, thc, auxbasis, thc_threshold=0.1)
 mf.kernel()
 ```
 
-To calculate a Laplace-transformed MP2 energy contribution with 10 integration points, build the THC in `ov` mode:
+`scfdd.UHF` and `scfdd.GHF` take the same arguments and switch to THC on the unrestricted / generalized density difference respectively:
 
 ```python
-from pythc.grid import BeckeGrid
+mf = scfdd.UHF(mol, thc, auxbasis, thc_threshold=0.1)
+mf.kernel()
+```
+
+To calculate a Laplace-transformed MP2 energy contribution with 10 integration points use:
+
+```python
 from pythc.thc.ls_ri_becke import LS_RI_Becke
-from pythc.methods.mp2 import LaplaceRMP2
+from pythc.methods.mp2 import LaplaceMP2
 
-grid_builder = BeckeGrid(mol)
-thc_builder = LS_RI_Becke(mol=mol, mo_coeff=mf.mo_coeff, grid=grid_builder,
-                          auxbasis='cc-pvdz-ri')
-thc_eri = thc_builder.build(mode='ov')
-
-mp2_e_thc = LaplaceRMP2(mol, mf, thc_eri, n_laplace=10).kernel()
+thc = LS_RI_Becke(mol=mol, auxbasis='cc-pvdz-ri')
+mp2_e_thc = LaplaceMP2(mf, thc, n_laplace=10).kernel()
 ```
 
 The THC representation **must** be built in `mode='ov'` for the MP2 calculation.
+
+To calculate the direct-RPA correlation energy use:
+
+```python
+from pythc.thc.ls_ri_becke import LS_RI_Becke
+from pythc.methods.rpa import RPA
+
+thc = LS_RI_Becke(mol=mol, auxbasis='cc-pvdz-ri')
+rpa_e_thc = RPA(mf, thc).kernel()
+```
+
+The THC representation **must** be built in `mode='ov'` for the RPA calculation.
 

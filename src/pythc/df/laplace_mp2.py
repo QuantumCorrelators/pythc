@@ -310,6 +310,7 @@ class LaplaceDFMP2(Configurable):
 
 
 class LaplaceDFSOSMP2(LaplaceDFMP2):
+    """Scaled-opposite-spin (SOS) variant of :class:`LaplaceDFMP2` (``jc=1.3``, ``kc=0.0``)."""
     def __init__(self, mf: SCF, n_laplace: int = 10, auxbasis: Optional[str] = None,
                  occ_blksize: Optional[int] = None):
         super().__init__(mf, n_laplace, auxbasis, jc=1.3, kc=0.0,
@@ -317,6 +318,7 @@ class LaplaceDFSOSMP2(LaplaceDFMP2):
 
 
 class LaplaceDFUMP2(Configurable):
+    """Unrestricted RI Laplace MP2, interface mirroring ``methods.mp2.LaplaceUMP2``."""
     def __init__(self, mf: SCF, n_laplace: int = 10, auxbasis: Optional[str] = None):
         self.mf = mf
         self.mol = mf.mol
@@ -329,6 +331,7 @@ class LaplaceDFUMP2(Configurable):
 
 
 class LaplaceDFSOSUMP2(Configurable):
+    """Scaled-opposite-spin (SOS) variant of :class:`LaplaceDFUMP2` (``aac=bbc=0``, ``abc=1.3``)."""
     def __init__(self, mf: SCF, n_laplace: int = 10, auxbasis: Optional[str] = None):
         self.mf = mf
         self.mol = mf.mol

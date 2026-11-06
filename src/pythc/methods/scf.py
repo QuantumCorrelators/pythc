@@ -34,7 +34,7 @@ import numpy as np
 from pyscf import df, gto
 
 import pythc.lib as lib
-from pythc.thc.thc_base import THC_ERI, THC
+from pythc.thc.thc_base import THC
 
 logger = logging.getLogger()
 
@@ -192,6 +192,7 @@ class THCDF(df.DF):
         self.with_k_thc = with_k_thc
 
     def build(self):
+        """Build the THC factors (``X``, ``Z``) and the conventional DF baseline."""
         eri_thc = self.thc.build(mode="ao")
         eri_thc.to_backend()
 
@@ -202,6 +203,7 @@ class THCDF(df.DF):
         return self
 
     def reset(self, mol=None):
+        """Reset the DF baseline (and THC factors) for a (possibly new) molecule."""
         if mol is not None:
             self.mol = mol
         auxbasis = self.auxbasis
