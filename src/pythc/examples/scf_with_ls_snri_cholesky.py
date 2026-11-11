@@ -1,9 +1,9 @@
 import logging
 import sys
 
-from pyscf import gto
+from pyscf import gto, scf
 
-from pythc.methods.hf import THC_RHF
+from pythc.methods.scf import THCDF
 from pythc.thc.ls_snri_cholesky import LS_snRI_Cholesky
 
 logging.basicConfig(
@@ -28,9 +28,8 @@ def main():
     auxbasis = 'cc-pvdz-ri'
 
     thc = LS_snRI_Cholesky(mol=mol, cholesky_threshold=1e-8)
-    eri = thc.build(mode='ao')
 
-    mf = THC_RHF(mol, eri, auxbasis, thc_only=True)
+    mf = scf.RHF(mol).density_fit(with_df=THCDF(mol, thc, auxbasis))
     scf_e = mf.kernel()
 
     print(f'SCF E: {scf_e}')

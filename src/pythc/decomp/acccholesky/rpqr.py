@@ -4,13 +4,13 @@ import numpy as np
 from pythc.decomp.acccholesky.rpcholesky import rejection_cholesky
 from time import time
 
-def accelerated_rpqr(B, k, b = 'auto', accelerated=True, verbose=False):
+def accelerated_rpqr(B, k, b = 'auto', accelerated=True, verbose=False, seed = None):
     m = B.shape[0]
     n = B.shape[1]
 
     Q = np.zeros((m, k))
     F = np.zeros((n, k))
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(seed)
 
     u = np.linalg.norm(B, axis=0) ** 2
 
@@ -30,7 +30,7 @@ def accelerated_rpqr(B, k, b = 'auto', accelerated=True, verbose=False):
             start = time()
         
         C = B[:,idx] - Q[:,:counter] @ F[idx, :counter].T
-        _, accepted = rejection_cholesky(C.T @ C)
+        _, accepted = rejection_cholesky(C.T @ C, rng)
         num_sel = len(accepted)
         
         if auto_b:

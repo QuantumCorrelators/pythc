@@ -12,16 +12,20 @@ from pythc.thc.ls_ri_thc import LS_RI_THC
 logger = logging.getLogger()
 
 class LS_RI_NNLS(LS_RI_THC):
-    def build_pruned_X(self, mode: Mode, mo_coeff: np.ndarray, auxmol) -> np.ndarray:
+    def build_pruned_X(self, mode: Mode, mo_coeff: np.ndarray, auxmol,
+                       n_occ: int | None = None) -> np.ndarray:
+        logger.info("building NNLS grid: mode=%s", mode)
         grid, weights = self.grid.build()
+        logger.info("built grid: grid=%d", len(grid))
         R = eval_basefuncs(self.mol, grid)
-        
+        logger.info("evaluated basis functions on grid: R=%s", R.shape)
+
         # 1. Point Selection using Pivoted Cholesky
         X_tmp = np.sqrt(np.sqrt(weights))[:, np.newaxis] * R
         if mode != 'ao':
             X_tmp = X_tmp @ mo_coeff
             
-        n_occ = self.mol.nelectron // 2
+        n_occ = self.mol.nelectron // 2 if n_occ is None else n_occ
         
         if mode == 'ao':
             metric = SymMetric(X_tmp)
@@ -30,13 +34,15 @@ class LS_RI_NNLS(LS_RI_THC):
         else:
             raise NotImplementedError
             
-        decomp = AccelRPCholesky()
+        decomp = AccelRPCholesky(seed=getattr(self, 'seed', None))
         n_grid = X_tmp.shape[0]
         # Defaulting to 1e-5 threshold similar to the Cholesky THC implementation
         cholesky_threshold = getattr(self, 'cholesky_threshold', 1e-5)
+        logger.info("selecting points: threshold=%.1e", cholesky_threshold)
         _, piv, num_rank = decomp.decompose(metric, n_grid, cholesky_threshold)
         piv = piv[:num_rank]
-        
+        logger.info("selected points: %d -> %d candidates", n_grid, num_rank)
+
         # 2. Weight Optimization using NNLS on the pruned grid
         R_pruned = R[piv]
         if mode != 'ao':
@@ -49,6 +55,7 @@ class LS_RI_NNLS(LS_RI_THC):
         A = lib.einsum('pn,pm->mnp', R_pruned_mo, R_pruned_mo).reshape(N**2, -1)
         y = S.reshape(N**2)
 
+        logger.info("optimizing weights: A=%s", A.shape)
         # A is now heavily overdetermined (e.g. 841 x ~300), making NNLS converge in ms
         w_pruned, _ = sp.optimize.nnls(A, y)
 
@@ -57,5 +64,7 @@ class LS_RI_NNLS(LS_RI_THC):
         w_final = w_pruned[piv_final]
         X_final = R_pruned[piv_final]
         X_final = X_final * np.sqrt(np.sqrt(w_final))[:, np.newaxis]
+        logger.info("built pruned collocation matrix: %d -> %d points, X=%s",
+                    num_rank, len(piv_final), X_final.shape)
 
         return X_final
